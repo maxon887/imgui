@@ -2572,46 +2572,48 @@ static void LoadIniSettingsFromDisk(const char* ini_filename)
 
 static void SaveIniSettingsToDisk(const char* ini_filename)
 {
-    ImGuiContext& g = *GImGui;
-    g.SettingsDirtyTimer = 0.0f;
-    if (!ini_filename)
-        return;
+	ImGuiContext& g = *GImGui;
+	if(g.SaveSettings){
+		g.SettingsDirtyTimer = 0.0f;
+		if (!ini_filename)
+			return;
 
-    // Gather data from windows that were active during this session
-    for (int i = 0; i != g.Windows.Size; i++)
-    {
-        ImGuiWindow* window = g.Windows[i];
-        if (window->Flags & ImGuiWindowFlags_NoSavedSettings)
-            continue;
-        ImGuiIniData* settings = FindWindowSettings(window->Name);
-        if (!settings)  // This will only return NULL in the rare instance where the window was first created with ImGuiWindowFlags_NoSavedSettings then had the flag disabled later on. We don't bind settings in this case (bug #1000).
-            continue;
-        settings->Pos = window->Pos;
-        settings->Size = window->SizeFull;
-        settings->Collapsed = window->Collapsed;
-    }
+		// Gather data from windows that were active during this session
+		for (int i = 0; i != g.Windows.Size; i++)
+		{
+			ImGuiWindow* window = g.Windows[i];
+			if (window->Flags & ImGuiWindowFlags_NoSavedSettings)
+				continue;
+			ImGuiIniData* settings = FindWindowSettings(window->Name);
+			if (!settings)  // This will only return NULL in the rare instance where the window was first created with ImGuiWindowFlags_NoSavedSettings then had the flag disabled later on. We don't bind settings in this case (bug #1000).
+				continue;
+			settings->Pos = window->Pos;
+			settings->Size = window->SizeFull;
+			settings->Collapsed = window->Collapsed;
+		}
 
-    // Write .ini file
-    // If a window wasn't opened in this session we preserve its settings
-    FILE* f = ImFileOpen(ini_filename, "wt");
-    if (!f)
-        return;
-    for (int i = 0; i != g.Settings.Size; i++)
-    {
-        const ImGuiIniData* settings = &g.Settings[i];
-        if (settings->Pos.x == FLT_MAX)
-            continue;
-        const char* name = settings->Name;
-        if (const char* p = strstr(name, "###"))  // Skip to the "###" marker if any. We don't skip past to match the behavior of GetID()
-            name = p;
-        fprintf(f, "[%s]\n", name);
-        fprintf(f, "Pos=%d,%d\n", (int)settings->Pos.x, (int)settings->Pos.y);
-        fprintf(f, "Size=%d,%d\n", (int)settings->Size.x, (int)settings->Size.y);
-        fprintf(f, "Collapsed=%d\n", settings->Collapsed);
-        fprintf(f, "\n");
-    }
+		// Write .ini file
+		// If a window wasn't opened in this session we preserve its settings
+		FILE* f = ImFileOpen(ini_filename, "wt");
+		if (!f)
+			return;
+		for (int i = 0; i != g.Settings.Size; i++)
+		{
+			const ImGuiIniData* settings = &g.Settings[i];
+			if (settings->Pos.x == FLT_MAX)
+				continue;
+			const char* name = settings->Name;
+			if (const char* p = strstr(name, "###"))  // Skip to the "###" marker if any. We don't skip past to match the behavior of GetID()
+				name = p;
+			fprintf(f, "[%s]\n", name);
+			fprintf(f, "Pos=%d,%d\n", (int)settings->Pos.x, (int)settings->Pos.y);
+			fprintf(f, "Size=%d,%d\n", (int)settings->Size.x, (int)settings->Size.y);
+			fprintf(f, "Collapsed=%d\n", settings->Collapsed);
+			fprintf(f, "\n");
+		}
 
-    fclose(f);
+		fclose(f);
+	}
 }
 
 static void MarkIniSettingsDirty(ImGuiWindow* window)

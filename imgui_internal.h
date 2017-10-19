@@ -435,6 +435,7 @@ struct ImGuiContext
     ImGuiWindow*            MovedWindow;                        // Track the child window we clicked on to move a window.
     ImGuiID                 MovedWindowMoveId;                  // == MovedWindow->RootWindow->MoveId
     ImVector<ImGuiIniData>  Settings;                           // .ini Settings
+	bool					SaveSettings;
     float                   SettingsDirtyTimer;                 // Save .ini Settings on disk when time reaches zero
     ImVector<ImGuiColMod>   ColorModifiers;                     // Stack for PushStyleColor()/PopStyleColor()
     ImVector<ImGuiStyleMod> StyleModifiers;                     // Stack for PushStyleVar()/PopStyleVar()
@@ -526,6 +527,7 @@ struct ImGuiContext
         ActiveIdWindow = NULL;
         MovedWindow = NULL;
         MovedWindowMoveId = 0;
+		SaveSettings = false;
         SettingsDirtyTimer = 0.0f;
 
         SetNextWindowPosVal = ImVec2(0.0f, 0.0f);
