@@ -5849,6 +5849,16 @@ bool ImGui::SmallButton(const char* label)
     return pressed;
 }
 
+bool ImGui::MenuButton(const char* label)
+{
+	ImGuiContext& g = *GImGui;
+	float backup_padding_y = g.Style.FramePadding.y;
+	g.Style.FramePadding.y = 0.0f;
+	bool pressed = ButtonEx(label, ImVec2(GetContentRegionAvailWidth(), 0), ImGuiButtonFlags_AlignTextBaseLine);
+	g.Style.FramePadding.y = backup_padding_y;
+	return pressed;
+}
+
 // Tip: use ImGui::PushID()/PopID() to push indices or pointers in the ID stack.
 // Then you can keep 'str_id' empty or the same for all your buttons (instead of creating a string based on a non-string id)
 bool ImGui::InvisibleButton(const char* str_id, const ImVec2& size_arg)
