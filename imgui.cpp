@@ -5854,7 +5854,7 @@ bool ImGui::MenuButton(const char* label)
 	ImGuiContext& g = *GImGui;
 	float backup_padding_y = g.Style.FramePadding.y;
 	g.Style.FramePadding.y = 0.0f;
-	bool pressed = ButtonEx(label, ImVec2(GetContentRegionAvailWidth(), 0), ImGuiButtonFlags_AlignTextBaseLine);
+	bool pressed = ButtonEx(label, ImVec2(GetContentRegionAvailWidth() - g.Style.IndentSpacing, 0), ImGuiButtonFlags_AlignTextBaseLine);
 	g.Style.FramePadding.y = backup_padding_y;
 	return pressed;
 }
