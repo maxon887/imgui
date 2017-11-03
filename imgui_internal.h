@@ -535,7 +535,7 @@ struct ImGuiContext
         ActiveIdWindow = NULL;
         MovingWindow = NULL;
         MovingWindowMoveId = 0;
-		SaveSettings = false;
+		SaveSettings = true;
         SettingsDirtyTimer = 0.0f;
 
         SetNextWindowPosVal = ImVec2(0.0f, 0.0f);
