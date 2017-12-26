@@ -37,15 +37,15 @@
 //#define IMGUI_STB_NAMESPACE     ImGuiStb
 
 //---- Define constructor and implicit cast operators to convert back<>forth from your math types and ImVec2/ImVec4.
-/*
+
 #define IM_VEC2_CLASS_EXTRA                                                 \
-        ImVec2(const MyVec2& f) { x = f.x; y = f.y; }                       \
-        operator MyVec2() const { return MyVec2(x,y); }
+        ImVec2(const cross::Vector2D& f) { x = f.x; y = f.y; }                       \
+        operator cross::Vector2D () const { return cross::Vector2D(x,y); }
 
 #define IM_VEC4_CLASS_EXTRA                                                 \
-        ImVec4(const MyVec4& f) { x = f.x; y = f.y; z = f.z; w = f.w; }     \
-        operator MyVec4() const { return MyVec4(x,y,z,w); }
-*/
+        ImVec4(const cross::Vector4D& f) { x = f.x; y = f.y; z = f.z; w = f.w; }     \
+        operator cross::Vector4D() const { return cross::Vector4D(x,y,z,w); }
+
 
 //---- Use 32-bit vertex indices (instead of default: 16-bit) to allow meshes with more than 64K vertices
 //#define ImDrawIdx unsigned int
