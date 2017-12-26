@@ -1942,13 +1942,14 @@ void ImGui::ShowDemoWindow(bool* p_open)
 bool ImGui::ShowStyleSelector(const char* label)
 {
     static int style_idx = 0;
-    if (ImGui::Combo(label, &style_idx, "Classic\0Dark\0Light\0"))
+    if (ImGui::Combo(label, &style_idx, "Classic\0Dark\0Light\0Warm\0"))
     {
         switch (style_idx)
         {
         case 0: ImGui::StyleColorsClassic(); break;
         case 1: ImGui::StyleColorsDark(); break;
         case 2: ImGui::StyleColorsLight(); break;
+		case 3: ImGui::StyleColorsWarm(); break;
         }
         return true;
     }
@@ -1994,6 +1995,19 @@ void ImGui::ShowStyleEditor(ImGuiStyle* ref)
 
     if (ImGui::ShowStyleSelector("Colors##Selector"))
         ref_saved_style = style;
+
+	ImGui::SameLine();
+	if(ImGui::Button("Save")) 
+	{
+		ImVec4* colors = ImGui::GetStyle().Colors;
+		File file;
+		file.name = "Style.ui";
+		file.data = (Byte*)colors;
+		file.size = sizeof(ImVec4) * ImGuiCol_COUNT;
+		cross::system->SaveDataFile(&file);
+		file.data = NULL;
+	}
+
     ImGui::ShowFontSelector("Fonts##Selector");
 
     // Simplified Settings
@@ -2013,47 +2027,6 @@ void ImGui::ShowStyleEditor(ImGuiStyle* ref)
         style = *ref;
     ImGui::SameLine();
     ShowHelpMarker("Save/Revert in local non-persistent storage. Default Colors definition are not affected. Use \"Export Colors\" below to save them somewhere.");
-
-	if (ImGui::TreeNode("Styles"))
-	{
-		float btnWidth = ImGui::CalcTextSize("User Defined").x + 20.f;
-		if (ImGui::Button("Default", ImVec2(btnWidth, 0)))
-		{
-			//ImGui::UseStyle(0);
-			CROSS_ASSERT(false, "UseStyle not implemented");
-			config->SetInt("IMGUI_STYLE", 0);
-		}
-		if (ImGui::Button("Warm", ImVec2(btnWidth, 0)))
-		{
-			//ImGui::UseStyle(1);
-			CROSS_ASSERT(false, "UseStyle not implemented");
-			config->SetInt("IMGUI_STYLE", 1);
-		}
-		if (ImGui::Button("Acid", ImVec2(btnWidth, 0)))
-		{
-			//ImGui::UseStyle(2);
-			CROSS_ASSERT(false, "UseStyle not implemented");
-			config->SetInt("IMGUI_STYLE", 2);
-		}
-		if (ImGui::Button("User Defined", ImVec2(btnWidth, 0)))
-		{
-			//ImGui::UseStyle(3);
-			CROSS_ASSERT(false, "UseStyle not implemented");
-			config->SetInt("IMGUI_STYLE", 3);
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Save"))
-		{
-			ImVec4* colors = ImGui::GetStyle().Colors;
-			File file;
-			file.name = "Style.ui";
-			file.data = (Byte*)colors;
-			file.size = sizeof(ImVec4) * ImGuiCol_COUNT;
-            cross::system->SaveDataFile(&file);
-			file.data = NULL;
-		}
-		ImGui::TreePop();
-	}
 
     if (ImGui::TreeNode("Rendering"))
     {
@@ -2264,128 +2237,18 @@ static void ShowExampleAppMainMenuBar()
         ImGui::EndMainMenuBar();
     }
 }
-/*
-void ImGui::UseStyle(int index)
+
+void ImGui::LoadStyle()
 {
-	switch(index) {
-	case 0: {
-		const ImGuiStyle default_style;
-		for(int i = 0; i < ImGuiCol_COUNT; i++)
-		{
-			ImVec4* colors = ImGui::GetStyle().Colors;
-			colors[i] = default_style.Colors[i];
-		}
-		break;
-	}
-	case 1: {
-		ImVec4* colors = ImGui::GetStyle().Colors;
-		colors[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
-		colors[ImGuiCol_TextDisabled] = ImVec4(0.60f, 0.60f, 0.60f, 1.00f);
-		colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.70f);
-		colors[ImGuiCol_ChildWindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_PopupBg] = ImVec4(0.05f, 0.05f, 0.10f, 0.90f);
-		colors[ImGuiCol_Border] = ImVec4(0.70f, 0.70f, 0.70f, 0.40f);
-		colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_FrameBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.30f);
-		colors[ImGuiCol_FrameBgHovered] = ImVec4(0.90f, 0.80f, 0.80f, 0.40f);
-		colors[ImGuiCol_FrameBgActive] = ImVec4(0.90f, 0.65f, 0.65f, 0.45f);
-		colors[ImGuiCol_TitleBg] = ImVec4(0.56f, 0.25f, 0.01f, 0.87f);
-		colors[ImGuiCol_TitleBgActive] = ImVec4(0.67f, 0.29f, 0.00f, 0.87f);
-		colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.56f, 0.25f, 0.01f, 0.87f);
-		colors[ImGuiCol_MenuBarBg] = ImVec4(0.90f, 0.52f, 0.24f, 0.67f);
-		colors[ImGuiCol_ScrollbarBg] = ImVec4(0.30f, 0.20f, 0.20f, 0.60f);
-		colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.80f, 0.40f, 0.40f, 0.30f);
-		colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.52f, 0.25f, 0.25f, 0.80f);
-		colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.62f, 0.00f, 0.00f, 0.87f);
-		colors[ImGuiCol_CheckMark] = ImVec4(0.90f, 0.90f, 0.90f, 0.50f);
-		colors[ImGuiCol_SliderGrab] = ImVec4(1.00f, 1.00f, 1.00f, 0.30f);
-		colors[ImGuiCol_SliderGrabActive] = ImVec4(0.80f, 0.50f, 0.50f, 1.00f);
-		colors[ImGuiCol_Button] = ImVec4(0.75f, 0.20f, 0.30f, 0.60f);
-		colors[ImGuiCol_ButtonHovered] = ImVec4(0.77f, 0.06f, 0.19f, 0.60f);
-		colors[ImGuiCol_ButtonActive] = ImVec4(0.62f, 0.00f, 0.00f, 0.87f);
-		colors[ImGuiCol_Header] = ImVec4(0.43f, 0.43f, 0.15f, 0.87f);
-		colors[ImGuiCol_HeaderHovered] = ImVec4(0.57f, 0.57f, 0.12f, 0.87f);
-		colors[ImGuiCol_HeaderActive] = ImVec4(0.71f, 0.72f, 0.00f, 0.87f);
-		colors[ImGuiCol_Separator] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-		colors[ImGuiCol_SeparatorHovered] = ImVec4(0.60f, 0.60f, 0.70f, 1.00f);
-		colors[ImGuiCol_SeparatorActive] = ImVec4(0.70f, 0.70f, 0.90f, 1.00f);
-		colors[ImGuiCol_ResizeGrip] = ImVec4(1.00f, 1.00f, 1.00f, 0.30f);
-		colors[ImGuiCol_ResizeGripHovered] = ImVec4(1.00f, 1.00f, 1.00f, 0.60f);
-		colors[ImGuiCol_ResizeGripActive] = ImVec4(1.00f, 1.00f, 1.00f, 0.90f);
-		colors[ImGuiCol_CloseButton] = ImVec4(1.00f, 0.54f, 0.00f, 0.50f);
-		colors[ImGuiCol_CloseButtonHovered] = ImVec4(1.00f, 0.54f, 0.00f, 0.50f);
-		colors[ImGuiCol_CloseButtonActive] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
-		colors[ImGuiCol_PlotLines] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-		colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
-		colors[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
-		colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(0.00f, 0.00f, 1.00f, 0.35f);
-		colors[ImGuiCol_ModalWindowDarkening] = ImVec4(0.20f, 0.20f, 0.20f, 0.35f);
-		break;
-	}
-	case 2: {
-		ImVec4* colors = ImGui::GetStyle().Colors;
-		colors[ImGuiCol_Text] = ImVec4(0.00f, 0.90f, 0.00f, 1.00f);
-		colors[ImGuiCol_TextDisabled] = ImVec4(0.60f, 0.60f, 0.60f, 1.00f);
-		colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.70f);
-		colors[ImGuiCol_ChildWindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_PopupBg] = ImVec4(0.05f, 0.05f, 0.10f, 0.90f);
-		colors[ImGuiCol_Border] = ImVec4(0.70f, 0.70f, 0.70f, 0.40f);
-		colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_FrameBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.30f);
-		colors[ImGuiCol_FrameBgHovered] = ImVec4(0.90f, 0.80f, 0.80f, 0.40f);
-		colors[ImGuiCol_FrameBgActive] = ImVec4(0.90f, 0.65f, 0.65f, 0.45f);
-		colors[ImGuiCol_TitleBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.98f);
-		colors[ImGuiCol_TitleBgActive] = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
-		colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.20f);
-		colors[ImGuiCol_MenuBarBg] = ImVec4(0.40f, 0.40f, 0.55f, 0.80f);
-		colors[ImGuiCol_ScrollbarBg] = ImVec4(0.20f, 0.25f, 0.30f, 0.60f);
-		colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.40f, 0.40f, 0.80f, 0.30f);
-		colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.40f, 0.40f, 0.80f, 0.40f);
-		colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.80f, 0.50f, 0.50f, 0.40f);
-		colors[ImGuiCol_CheckMark] = ImVec4(0.90f, 0.90f, 0.90f, 0.50f);
-		colors[ImGuiCol_SliderGrab] = ImVec4(1.00f, 1.00f, 1.00f, 0.30f);
-		colors[ImGuiCol_SliderGrabActive] = ImVec4(0.80f, 0.50f, 0.50f, 1.00f);
-		colors[ImGuiCol_Button] = ImVec4(0.00f, 0.12f, 0.99f, 0.62f);
-		colors[ImGuiCol_ButtonHovered] = ImVec4(0.00f, 0.45f, 0.99f, 0.62f);
-		colors[ImGuiCol_ButtonActive] = ImVec4(0.00f, 0.25f, 1.00f, 1.00f);
-		colors[ImGuiCol_Header] = ImVec4(0.40f, 0.40f, 0.90f, 0.45f);
-		colors[ImGuiCol_HeaderHovered] = ImVec4(0.45f, 0.45f, 0.90f, 0.80f);
-		colors[ImGuiCol_HeaderActive] = ImVec4(0.53f, 0.53f, 0.87f, 0.80f);
-		colors[ImGuiCol_Separator] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-		colors[ImGuiCol_SeparatorHovered] = ImVec4(0.60f, 0.60f, 0.70f, 1.00f);
-		colors[ImGuiCol_SeparatorActive] = ImVec4(0.70f, 0.70f, 0.90f, 1.00f);
-		colors[ImGuiCol_ResizeGrip] = ImVec4(1.00f, 1.00f, 1.00f, 0.30f);
-		colors[ImGuiCol_ResizeGripHovered] = ImVec4(1.00f, 1.00f, 1.00f, 0.60f);
-		colors[ImGuiCol_ResizeGripActive] = ImVec4(1.00f, 1.00f, 1.00f, 0.90f);
-		colors[ImGuiCol_CloseButton] = ImVec4(0.50f, 0.50f, 0.90f, 0.50f);
-		colors[ImGuiCol_CloseButtonHovered] = ImVec4(0.70f, 0.70f, 0.90f, 0.60f);
-		colors[ImGuiCol_CloseButtonActive] = ImVec4(0.70f, 0.70f, 0.70f, 1.00f);
-		colors[ImGuiCol_PlotLines] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-		colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
-		colors[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
-		colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(0.00f, 0.00f, 1.00f, 0.35f);
-		colors[ImGuiCol_ModalWindowDarkening] = ImVec4(0.20f, 0.20f, 0.20f, 0.35f);
-		break;
-	}
-	case 3: {
+	if(system->IsDataFileExists("Style.ui"))
+	{
 		File* file = cross::system->LoadDataFile("Style.ui");
-		if(file)
-		{
-			ImVec4* colors = ImGui::GetStyle().Colors;
-			memcpy(colors, file->data, file->size);
-			delete file;
-		} else {
-			UseStyle(0);
-			config->SetInt("IMGUI_STYLE", 0);
-		}
-		break;
+		ImVec4* colors = ImGui::GetStyle().Colors;
+		memcpy(colors, file->data, file->size);
+		delete file;
+		
 	}
-	default:
-		break;
-	}
-}*/
+}
 
 static void ShowExampleMenuFile()
 {

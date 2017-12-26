@@ -626,6 +626,11 @@
 #pragma GCC diagnostic ignored "-Wformat-nonliteral"        // warning: format not a string literal, format string not checked
 #endif
 
+#include "Cross.h"
+#ifdef new
+#undef new
+#endif
+
 //-------------------------------------------------------------------------
 // Forward Declarations
 //-------------------------------------------------------------------------
