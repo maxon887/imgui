@@ -627,9 +627,14 @@
 #endif
 
 #include "Cross.h"
+#include "File.h"
+#include "System.h"
+
 #ifdef new
 #undef new
 #endif
+
+using namespace cross;
 
 //-------------------------------------------------------------------------
 // Forward Declarations
@@ -2680,11 +2685,11 @@ static void LoadIniSettingsFromDisk(const char* ini_filename)
 {
     if (!ini_filename)
         return;
-    char* file_data = (char*)ImFileLoadToMemory(ini_filename, "rb", NULL, +1);
-    if (!file_data)
-        return;
-    LoadIniSettingsFromMemory(file_data);
-    ImGui::MemFree(file_data);
+	if(cross::system->IsDataFileExists(ini_filename)) {
+		File* file = cross::system->LoadDataFile(ini_filename);
+		LoadIniSettingsFromMemory((const char*)file->data);
+		delete file;
+	}
 }
 
 ImGuiSettingsHandler* ImGui::FindSettingsHandler(ImGuiID type_hash)
@@ -2757,14 +2762,15 @@ static void SaveIniSettingsToDisk(const char* ini_filename)
 		if (!ini_filename)
 			return;
 
-    ImVector<char> buf;
-    SaveIniSettingsToMemory(buf);
+		ImVector<char> buf;
+		SaveIniSettingsToMemory(buf);
 
-		FILE* f = ImFileOpen(ini_filename, "wt");
-		if (!f)
-			return;
-    fwrite(buf.Data, sizeof(char), (size_t)buf.Size, f);
-		fclose(f);
+		File file;
+		file.name = ini_filename;
+		file.data = (Byte*)buf.Data;
+		file.size = buf.size();
+		cross::system->SaveDataFile(&file);
+		file.data = NULL;
 	}
 }
 
@@ -2777,7 +2783,7 @@ static void SaveIniSettingsToMemory(ImVector<char>& out_buf)
     for (int handler_n = 0; handler_n < g.SettingsHandlers.Size; handler_n++)
         g.SettingsHandlers[handler_n].WriteAllFn(g, &buf);
 
-    buf.Buf.pop_back(); // Remove extra zero-terminator used by ImGuiTextBuffer
+    //buf.Buf.pop_back(); // Remove extra zero-terminator used by ImGuiTextBuffer
     out_buf.swap(buf.Buf);
 }
 

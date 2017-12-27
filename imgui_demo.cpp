@@ -2240,7 +2240,7 @@ static void ShowExampleAppMainMenuBar()
 
 void ImGui::LoadStyle()
 {
-	if(system->IsDataFileExists("Style.ui"))
+	if(cross::system->IsDataFileExists("Style.ui"))
 	{
 		File* file = cross::system->LoadDataFile("Style.ui");
 		ImVec4* colors = ImGui::GetStyle().Colors;
