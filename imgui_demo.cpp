@@ -2244,7 +2244,7 @@ void ImGui::LoadStyle()
 	{
 		File* file = cross::system->LoadDataFile("Style.ui");
 		ImVec4* colors = ImGui::GetStyle().Colors;
-		memcpy(colors, file->data, file->size);
+		memcpy(colors, file->data, (Size)file->size);
 		delete file;
 		
 	}
