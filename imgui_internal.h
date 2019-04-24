@@ -1,4 +1,4 @@
-// dear imgui, v1.53
+// dear imgui, v1.54 WIP
 // (internals)
 
 // You may use this file to debug, understand or extend ImGui features but we don't provide any guarantee of forward compatibility!
@@ -14,6 +14,7 @@
 
 #include <stdio.h>      // FILE*
 #include <math.h>       // sqrtf, fabsf, fmodf, powf, floorf, ceilf, cosf, sinf
+#include <limits.h>     // INT_MIN, INT_MAX
 
 #ifdef _MSC_VER
 #pragma warning (push)
@@ -46,6 +47,7 @@ struct ImGuiWindowSettings;
 typedef int ImGuiLayoutType;        // enum: horizontal or vertical             // enum ImGuiLayoutType_
 typedef int ImGuiButtonFlags;       // flags: for ButtonEx(), ButtonBehavior()  // enum ImGuiButtonFlags_
 typedef int ImGuiItemFlags;         // flags: for PushItemFlag()                // enum ImGuiItemFlags_
+typedef int ImGuiNavHighlightFlags; // flags: for RenderNavHighlight()          // enum ImGuiNavHighlightFlags_
 typedef int ImGuiSeparatorFlags;    // flags: for Separator() - internal        // enum ImGuiSeparatorFlags_
 typedef int ImGuiSliderFlags;       // flags: for SliderBehavior()              // enum ImGuiSliderFlags_
 
@@ -77,8 +79,7 @@ extern IMGUI_API ImGuiContext* GImGui;  // Current implicit ImGui context pointe
 // Helpers
 //-----------------------------------------------------------------------------
 
-#define IM_PI                       3.14159265358979323846f
-#define IM_OFFSETOF(_TYPE,_ELM)     ((size_t)&(((_TYPE*)0)->_ELM))
+#define IM_PI           3.14159265358979323846f
 
 // Helpers: UTF-8 <> wchar
 IMGUI_API int           ImTextStrToUtf8(char* buf, int buf_size, const ImWchar* in_text, const ImWchar* in_text_end);      // return output UTF-8 bytes count
@@ -188,7 +189,8 @@ enum ImGuiButtonFlags_
     ImGuiButtonFlags_AlignTextBaseLine      = 1 << 9,   // vertically align button to match text baseline - ButtonEx() only // FIXME: Should be removed and handled by SmallButton(), not possible currently because of DC.CursorPosPrevLine
     ImGuiButtonFlags_NoKeyModifiers         = 1 << 10,  // disable interaction if a key modifier is held
     ImGuiButtonFlags_NoHoldingActiveID      = 1 << 11,  // don't set ActiveId while holding the mouse (ImGuiButtonFlags_PressedOnClick only)
-    ImGuiButtonFlags_PressedOnDragDropHold  = 1 << 12   // press when held into while we are drag and dropping another item (used by e.g. tree nodes, collapsing headers)
+    ImGuiButtonFlags_PressedOnDragDropHold  = 1 << 12,  // press when held into while we are drag and dropping another item (used by e.g. tree nodes, collapsing headers)
+    ImGuiButtonFlags_NoNavFocus             = 1 << 13   // don't override navigation focus when activated
 };
 
 enum ImGuiSliderFlags_
@@ -248,6 +250,14 @@ enum ImGuiDataType
     ImGuiDataType_Float2
 };
 
+enum ImGuiInputSource
+{
+    ImGuiInputSource_None = 0,
+    ImGuiInputSource_Mouse,
+    ImGuiInputSource_Nav,
+    ImGuiInputSource_Count_,
+};
+
 enum ImGuiDir
 {
     ImGuiDir_None    = -1,
@@ -256,6 +266,13 @@ enum ImGuiDir
     ImGuiDir_Up      = 2,
     ImGuiDir_Down    = 3,
     ImGuiDir_Count_
+};
+
+enum ImGuiNavHighlightFlags_
+{
+    ImGuiNavHighlightFlags_TypeDefault  = 1 << 0,
+    ImGuiNavHighlightFlags_TypeThin     = 1 << 1,
+    ImGuiNavHighlightFlags_AlwaysDraw   = 1 << 2
 };
 
 // 2D axis aligned bounding-box
@@ -270,36 +287,26 @@ struct IMGUI_API ImRect
     ImRect(const ImVec4& v)                         : Min(v.x, v.y), Max(v.z, v.w)                  {}
     ImRect(float x1, float y1, float x2, float y2)  : Min(x1, y1), Max(x2, y2)                      {}
 
-    ImVec2      GetCenter() const               { return ImVec2((Min.x+Max.x)*0.5f, (Min.y+Max.y)*0.5f); }
-    ImVec2      GetSize() const                 { return ImVec2(Max.x-Min.x, Max.y-Min.y); }
-    float       GetWidth() const                { return Max.x-Min.x; }
-    float       GetHeight() const               { return Max.y-Min.y; }
-    ImVec2      GetTL() const                   { return Min; }                   // Top-left
-    ImVec2      GetTR() const                   { return ImVec2(Max.x, Min.y); }  // Top-right
-    ImVec2      GetBL() const                   { return ImVec2(Min.x, Max.y); }  // Bottom-left
-    ImVec2      GetBR() const                   { return Max; }                   // Bottom-right
-    bool        Contains(const ImVec2& p) const { return p.x >= Min.x     && p.y >= Min.y     && p.x < Max.x     && p.y < Max.y; }
-    bool        Contains(const ImRect& r) const { return r.Min.x >= Min.x && r.Min.y >= Min.y && r.Max.x < Max.x && r.Max.y < Max.y; }
-    bool        Overlaps(const ImRect& r) const { return r.Min.y < Max.y  && r.Max.y > Min.y  && r.Min.x < Max.x && r.Max.x > Min.x; }
-    void        Add(const ImVec2& rhs)          { if (Min.x > rhs.x)     Min.x = rhs.x;     if (Min.y > rhs.y) Min.y = rhs.y;         if (Max.x < rhs.x) Max.x = rhs.x;         if (Max.y < rhs.y) Max.y = rhs.y; }
-    void        Add(const ImRect& rhs)          { if (Min.x > rhs.Min.x) Min.x = rhs.Min.x; if (Min.y > rhs.Min.y) Min.y = rhs.Min.y; if (Max.x < rhs.Max.x) Max.x = rhs.Max.x; if (Max.y < rhs.Max.y) Max.y = rhs.Max.y; }
-    void        Expand(const float amount)      { Min.x -= amount;   Min.y -= amount;   Max.x += amount;   Max.y += amount; }
-    void        Expand(const ImVec2& amount)    { Min.x -= amount.x; Min.y -= amount.y; Max.x += amount.x; Max.y += amount.y; }
-    void        Translate(const ImVec2& v)      { Min.x += v.x; Min.y += v.y; Max.x += v.x; Max.y += v.y; }
-    void        ClipWith(const ImRect& clip)    { if (Min.x < clip.Min.x) Min.x = clip.Min.x; if (Min.y < clip.Min.y) Min.y = clip.Min.y; if (Max.x > clip.Max.x) Max.x = clip.Max.x; if (Max.y > clip.Max.y) Max.y = clip.Max.y; }
-    void        Floor()                         { Min.x = (float)(int)Min.x; Min.y = (float)(int)Min.y; Max.x = (float)(int)Max.x; Max.y = (float)(int)Max.y; }
-    void        FixInverted()                   { if (Min.x > Max.x) ImSwap(Min.x, Max.x); if (Min.y > Max.y) ImSwap(Min.y, Max.y); }
-    bool        IsFinite() const                { return Min.x != FLT_MAX; }
-    ImVec2      GetClosestPoint(ImVec2 p, bool on_edge) const
-    {
-        if (!on_edge && Contains(p))
-            return p;
-        if (p.x > Max.x) p.x = Max.x;
-        else if (p.x < Min.x) p.x = Min.x;
-        if (p.y > Max.y) p.y = Max.y;
-        else if (p.y < Min.y) p.y = Min.y;
-        return p;
-    }
+    ImVec2      GetCenter() const                   { return ImVec2((Min.x + Max.x) * 0.5f, (Min.y + Max.y) * 0.5f); }
+    ImVec2      GetSize() const                     { return ImVec2(Max.x - Min.x, Max.y - Min.y); }
+    float       GetWidth() const                    { return Max.x - Min.x; }
+    float       GetHeight() const                   { return Max.y - Min.y; }
+    ImVec2      GetTL() const                       { return Min; }                   // Top-left
+    ImVec2      GetTR() const                       { return ImVec2(Max.x, Min.y); }  // Top-right
+    ImVec2      GetBL() const                       { return ImVec2(Min.x, Max.y); }  // Bottom-left
+    ImVec2      GetBR() const                       { return Max; }                   // Bottom-right
+    bool        Contains(const ImVec2& p) const     { return p.x     >= Min.x && p.y     >= Min.y && p.x     < Max.x && p.y     < Max.y; }
+    bool        Contains(const ImRect& r) const     { return r.Min.x >= Min.x && r.Min.y >= Min.y && r.Max.x < Max.x && r.Max.y < Max.y; }
+    bool        Overlaps(const ImRect& r) const     { return r.Min.y <  Max.y && r.Max.y >  Min.y && r.Min.x < Max.x && r.Max.x > Min.x; }
+    void        Add(const ImVec2& p)                { if (Min.x > p.x)     Min.x = p.x;     if (Min.y > p.y)     Min.y = p.y;     if (Max.x < p.x)     Max.x = p.x;     if (Max.y < p.y)     Max.y = p.y; }
+    void        Add(const ImRect& r)                { if (Min.x > r.Min.x) Min.x = r.Min.x; if (Min.y > r.Min.y) Min.y = r.Min.y; if (Max.x < r.Max.x) Max.x = r.Max.x; if (Max.y < r.Max.y) Max.y = r.Max.y; }
+    void        Expand(const float amount)          { Min.x -= amount;   Min.y -= amount;   Max.x += amount;   Max.y += amount; }
+    void        Expand(const ImVec2& amount)        { Min.x -= amount.x; Min.y -= amount.y; Max.x += amount.x; Max.y += amount.y; }
+    void        Translate(const ImVec2& v)          { Min.x += v.x; Min.y += v.y; Max.x += v.x; Max.y += v.y; }
+    void        ClipWith(const ImRect& r)           { if (Min.x < r.Min.x) Min.x = r.Min.x; if (Min.y < r.Min.y) Min.y = r.Min.y; if (Max.x > r.Max.x) Max.x = r.Max.x; if (Max.y > r.Max.y) Max.y = r.Max.y; }
+    void        Floor()                             { Min.x = (float)(int)Min.x; Min.y = (float)(int)Min.y; Max.x = (float)(int)Max.x; Max.y = (float)(int)Max.y; }
+    void        FixInverted()                       { if (Min.x > Max.x) ImSwap(Min.x, Max.x); if (Min.y > Max.y) ImSwap(Min.y, Max.y); }
+    bool        IsFinite() const                    { return Min.x != FLT_MAX; }
 };
 
 // Stacked color modifier, backup of modified data so we can restore it
@@ -405,13 +412,14 @@ struct ImGuiMouseCursorData
 // Storage for current popup stack
 struct ImGuiPopupRef
 {
-    ImGuiID         PopupId;        // Set on OpenPopup()
-    ImGuiWindow*    Window;         // Resolved on BeginPopup() - may stay unresolved if user never calls OpenPopup()
-    ImGuiWindow*    ParentWindow;   // Set on OpenPopup()
-    ImGuiID         ParentMenuSet;  // Set on OpenPopup()
-    ImVec2          MousePosOnOpen; // Copy of mouse position at the time of opening popup
+    ImGuiID             PopupId;        // Set on OpenPopup()
+    ImGuiWindow*        Window;         // Resolved on BeginPopup() - may stay unresolved if user never calls OpenPopup()
+    ImGuiWindow*        ParentWindow;   // Set on OpenPopup()
+    ImGuiID             ParentMenuSet;  // Set on OpenPopup()
+    ImVec2              PopupPosOnOpen; // Preferred popup position (typically == MousePosOnOpen when using mouse)
+    ImVec2              MousePosOnOpen; // Copy of mouse position at the time of opening popup
 
-    ImGuiPopupRef(ImGuiID id, ImGuiWindow* parent_window, ImGuiID parent_menu_set, const ImVec2& mouse_pos) { PopupId = id; Window = NULL; ParentWindow = parent_window; ParentMenuSet = parent_menu_set; MousePosOnOpen = mouse_pos; }
+    ImGuiPopupRef(ImGuiID id, ImGuiWindow* parent_window, ImGuiID parent_menu_set, const ImVec2& popup_pos, const ImVec2& mouse_pos) { PopupId = id; Window = NULL; ParentWindow = parent_window; ParentMenuSet = parent_menu_set; PopupPosOnOpen = popup_pos; MousePosOnOpen = mouse_pos; }
 };
 
 struct ImGuiColumnData
@@ -491,7 +499,6 @@ struct ImGuiContext
     ImGuiStorage            WindowsById;
     int                     WindowsActiveCount;
     ImGuiWindow*            CurrentWindow;                      // Being drawn into
-    ImGuiWindow*            NavWindow;                          // Nav/focused window for navigation
     ImGuiWindow*            HoveredWindow;                      // Will catch mouse inputs
     ImGuiWindow*            HoveredRootWindow;                  // Will catch mouse inputs (for focus/move only)
     ImGuiID                 HoveredId;                          // Hovered widget
@@ -504,8 +511,10 @@ struct ImGuiContext
     bool                    ActiveIdIsAlive;                    // Active widget has been seen this frame
     bool                    ActiveIdIsJustActivated;            // Set at the time of activation for one frame
     bool                    ActiveIdAllowOverlap;               // Active widget allows another widget to steal active id (generally for overlapping widgets, but not always)
+    int                     ActiveIdAllowNavDirFlags;           // Active widget allows using directional navigation (e.g. can activate a button and move away from it)
     ImVec2                  ActiveIdClickOffset;                // Clicked offset from upper-left corner, if applicable (currently only set by ButtonBehavior)
     ImGuiWindow*            ActiveIdWindow;
+    ImGuiInputSource        ActiveIdSource;                     // Activating with mouse or nav (gamepad/keyboard)
     ImGuiWindow*            MovingWindow;                       // Track the child window we clicked on to move a window.
     ImGuiID                 MovingWindowMoveId;                 // == MovingWindow->MoveId
     ImVector<ImGuiColMod>   ColorModifiers;                     // Stack for PushStyleColor()/PopStyleColor()
@@ -513,6 +522,42 @@ struct ImGuiContext
     ImVector<ImFont*>       FontStack;                          // Stack for PushFont()/PopFont()
     ImVector<ImGuiPopupRef> OpenPopupStack;                     // Which popups are open (persistent)
     ImVector<ImGuiPopupRef> CurrentPopupStack;                  // Which level of BeginPopup() we are in (reset every frame)
+
+    // Navigation data (for gamepad/keyboard)
+    ImGuiWindow*            NavWindow;                          // Focused window for navigation. Could be called 'FocusWindow'
+    ImGuiID                 NavId;                              // Focused item for navigation
+    ImGuiID                 NavActivateId;                      // ~~ IsNavInputPressed(ImGuiNavInput_PadActivate) ? NavId : 0, also set when calling ActivateItem()
+    ImGuiID                 NavActivateDownId;                  // ~~ IsNavInputPressed(ImGuiNavInput_PadActivate) ? NavId : 0
+    ImGuiID                 NavInputId;                         // ~~ IsNavInputPressed(ImGuiNavInput_PadInput) ? NavId : 0
+    ImGuiID                 NavJustTabbedId;                    // Just tabbed to this id.
+    ImGuiID                 NavNextActivateId;                  // Set by ActivateItem(), queued until next frame
+    ImGuiID                 NavJustMovedToId;                   // Just navigated to this id (result of a successfully MoveRequest)
+    ImRect                  NavScoringRectScreen;               // Rectangle used for scoring, in screen space. Based of window->DC.NavRefRectRel[], modified for directional navigation scoring.
+    ImGuiWindow*            NavWindowingTarget;
+    float                   NavWindowingDisplayAlpha;
+    bool                    NavWindowingToggleLayer;
+    int                     NavLayer;                           // Layer we are navigating on. For now the system is hard-coded for 0=main contents and 1=menu/title bar, may expose layers later.
+    int                     NavIdTabCounter;                    // == NavWindow->DC.FocusIdxTabCounter at time of NavId processing
+    bool                    NavIdIsAlive;                       // Nav widget has been seen this frame ~~ NavRefRectRel is valid
+    bool                    NavMousePosDirty;
+    bool                    NavDisableHighlight;                // When user starts using mouse, we hide gamepad/keyboard highlight (nb: but they are still available, which is why NavDisableHighlight isn't always != NavDisableMouseHover)
+    bool                    NavDisableMouseHover;               // When user starts using gamepad/keyboard, we hide mouse hovering highlight until mouse is touched again.
+    bool                    NavAnyRequest;                      // ~~ NavMoveRequest || NavInitRequest
+    bool                    NavInitRequest;                     // Init request for appearing window to select first item
+    ImGuiID                 NavInitResultId;
+    ImRect                  NavInitResultRectRel;
+    bool                    NavInitResultExplicit;              // Whether the result was explicitly requested with SetItemDefaultFocus()
+    bool                    NavMoveFromClampedRefRect;          // Set by manual scrolling, if we scroll to a point where NavId isn't visible we reset navigation from visible items
+    bool                    NavMoveRequest;                     // Move request for this frame
+    int                     NavMoveRequestForwardStep;          // 0: no forward, 1: forward request, 2: forward result (this is used to navigate sibling parent menus from a child menu)
+    ImGuiDir                NavMoveDir;                         // Direction of the move request (left/right/up/down)
+    ImGuiDir                NavMoveDirLast;                     // Direction of the previous move request
+    ImGuiID                 NavMoveResultId;                    // Best move request candidate
+    ImGuiID                 NavMoveResultParentId;              //
+    float                   NavMoveResultDistBox;               // Best move request candidate box distance to current NavId
+    float                   NavMoveResultDistCenter;            // Best move request candidate center distance to current NavId
+    float                   NavMoveResultDistAxial;
+    ImRect                  NavMoveResultRectRel;               // Best move request candidate bounding box in window relative space
 
     // Storage for SetNexWindow** and SetNextTreeNode*** functions
     ImVec2                  SetNextWindowPosVal;
@@ -603,7 +648,6 @@ struct ImGuiContext
         FrameCountEnded = FrameCountRendered = -1;
         WindowsActiveCount = 0;
         CurrentWindow = NULL;
-        NavWindow = NULL;
         HoveredWindow = NULL;
         HoveredRootWindow = NULL;
         HoveredId = 0;
@@ -616,10 +660,37 @@ struct ImGuiContext
         ActiveIdIsAlive = false;
         ActiveIdIsJustActivated = false;
         ActiveIdAllowOverlap = false;
+        ActiveIdAllowNavDirFlags = 0;
         ActiveIdClickOffset = ImVec2(-1,-1);
         ActiveIdWindow = NULL;
+        ActiveIdSource = ImGuiInputSource_None;
         MovingWindow = NULL;
         MovingWindowMoveId = 0;
+
+        NavWindow = NULL;
+        NavId = NavActivateId = NavActivateDownId = NavInputId = 0;
+        NavJustTabbedId = NavJustMovedToId = NavNextActivateId = 0;
+        NavScoringRectScreen = ImRect();
+        NavWindowingTarget = NULL;
+        NavWindowingDisplayAlpha = 0.0f;
+        NavWindowingToggleLayer = false;
+        NavLayer = 0;
+        NavIdTabCounter = INT_MAX;
+        NavIdIsAlive = false;
+        NavMousePosDirty = false;
+        NavDisableHighlight = true;
+        NavDisableMouseHover = false;
+        NavAnyRequest = false;
+        NavInitRequest = false;
+        NavInitResultId = 0;
+        NavInitResultExplicit = false;
+        NavMoveFromClampedRefRect = false;
+        NavMoveRequest = false;
+        NavMoveRequestForwardStep = 0;
+        NavMoveDir = NavMoveDirLast = ImGuiDir_None;
+        NavMoveResultId = 0;
+        NavMoveResultParentId = 0;
+        NavMoveResultDistBox = NavMoveResultDistCenter = NavMoveResultDistAxial = 0.0f;
 
         SetNextWindowPosVal = ImVec2(0.0f, 0.0f);
         SetNextWindowSizeVal = ImVec2(0.0f, 0.0f);
@@ -684,8 +755,8 @@ enum ImGuiItemFlags_
     ImGuiItemFlags_AllowKeyboardFocus           = 1 << 0,  // true
     ImGuiItemFlags_ButtonRepeat                 = 1 << 1,  // false    // Button() will return true multiple times based on io.KeyRepeatDelay and io.KeyRepeatRate settings.
     ImGuiItemFlags_Disabled                     = 1 << 2,  // false    // FIXME-WIP: Disable interactions but doesn't affect visuals. Should be: grey out and disable interactions with widgets that affect data + view widgets (WIP) 
-    //ImGuiItemFlags_NoNav                      = 1 << 3,  // false
-    //ImGuiItemFlags_NoNavDefaultFocus          = 1 << 4,  // false
+    ImGuiItemFlags_NoNav                        = 1 << 3,  // false
+    ImGuiItemFlags_NoNavDefaultFocus            = 1 << 4,  // false
     ImGuiItemFlags_SelectableDontClosePopup     = 1 << 5,  // false    // MenuItem/Selectable() automatically closes current Popup window
     ImGuiItemFlags_Default_                     = ImGuiItemFlags_AllowKeyboardFocus
 };
@@ -707,11 +778,17 @@ struct IMGUI_API ImGuiDrawContext
     ImGuiID                 LastItemId;
     ImRect                  LastItemRect;
     bool                    LastItemRectHoveredRect;
-    bool                    MenuBarAppending;
+    bool                    NavHasScroll;           // Set when scrolling can be used (ScrollMax > 0.0f)
+    int                     NavLayerCurrent;        // Current layer, 0..31 (we currently only use 0..1)
+    int                     NavLayerCurrentMask;    // = (1 << NavLayerCurrent) used by ItemAdd prior to clipping.
+    int                     NavLayerActiveMask;     // Which layer have been written to (result from previous frame)
+    int                     NavLayerActiveMaskNext; // Which layer have been written to (buffer for current frame)
+    bool                    MenuBarAppending;       // FIXME: Remove this
     float                   MenuBarOffsetX;
     ImVector<ImGuiWindow*>  ChildWindows;
     ImGuiStorage*           StateStorage;
     ImGuiLayoutType         LayoutType;
+    ImGuiLayoutType         ParentLayoutType;       // Layout type of parent window at the time of Begin()
 
     // We store the current settings outside of the vectors to increase memory locality (reduce cache misses). The vectors are rarely modified. Also it allows us to not heap allocate for short-lived windows which are not using those settings.
     ImGuiItemFlags          ItemFlags;              // == ItemFlagsStack.back() [empty == ImGuiItemFlags_Default]
@@ -738,10 +815,14 @@ struct IMGUI_API ImGuiDrawContext
         LastItemId = 0;
         LastItemRect = ImRect();
         LastItemRectHoveredRect = false;
+        NavHasScroll = false;
+        NavLayerActiveMask = NavLayerActiveMaskNext = 0x00;
+        NavLayerCurrent = 0;
+        NavLayerCurrentMask = 1 << 0;
         MenuBarAppending = false;
         MenuBarOffsetX = 0.0f;
         StateStorage = NULL;
-        LayoutType = ImGuiLayoutType_Vertical;
+        LayoutType = ParentLayoutType = ImGuiLayoutType_Vertical;
         ItemWidth = 0.0f;
         ItemFlags = ImGuiItemFlags_Default_;
         TextWrapPos = -1.0f;
@@ -772,6 +853,7 @@ struct IMGUI_API ImGuiWindow
     float                   WindowRounding;                     // Window rounding at the time of begin.
     float                   WindowBorderSize;                   // Window border size at the time of begin.
     ImGuiID                 MoveId;                             // == window->GetID("#MOVE")
+    ImGuiID                 ChildId;                            // Id of corresponding item in parent window (for child windows)
     ImVec2                  Scroll;
     ImVec2                  ScrollTarget;                       // target scroll position. stored as cursor position with scrolling canceled out, so the highest point is always 0.0f. (FLT_MAX for no change)
     ImVec2                  ScrollTargetCenterRatio;            // 0.0f = scroll so that target position is at top, 0.5f = scroll so that target position is centered
@@ -781,6 +863,7 @@ struct IMGUI_API ImGuiWindow
     bool                    WasActive;
     bool                    WriteAccessed;                      // Set to true when any widget access the current window
     bool                    Collapsed;                          // Set when collapsing window to become only title-bar
+    bool                    CollapseToggleWanted;
     bool                    SkipItems;                          // Set when items can safely be all clipped (e.g. window not visible or collapsed)
     bool                    Appearing;                          // Set during the frame where the window is appearing (or re-appearing)
     bool                    CloseButton;                        // Set when the window has a close button (p_open != NULL)
@@ -799,6 +882,9 @@ struct IMGUI_API ImGuiWindow
     ImVec2                  SetWindowPosVal;                    // store window position when using a non-zero Pivot (position set needs to be processed when we know the window size)
     ImVec2                  SetWindowPosPivot;                  // store window pivot for positioning. ImVec2(0,0) when positioning from top-left corner; ImVec2(0.5f,0.5f) for centering; ImVec2(1,1) for bottom right.
 
+    ImGuiID                 NavLastIds[2];                      // Last known NavId for this window, per layer (0/1)
+    ImRect                  NavRectRel[2];                      // Reference rectangle, in window space
+
     ImGuiDrawContext        DC;                                 // Temporary per-window data, reset at the beginning of the frame
     ImVector<ImGuiID>       IDStack;                            // ID stack. ID are hashes seeded with the value at the top of the stack
     ImRect                  ClipRect;                           // = DrawList->clip_rect_stack.back(). Scissoring / clipping rectangle. x1, y1, x2, y2.
@@ -814,8 +900,10 @@ struct IMGUI_API ImGuiWindow
     ImGuiWindow*            ParentWindow;                       // If we are a child _or_ popup window, this is pointing to our parent. Otherwise NULL.
     ImGuiWindow*            RootWindow;                         // Generally point to ourself. If we are a child window, this is pointing to the first non-child parent window.
     ImGuiWindow*            RootNonPopupWindow;                 // Generally point to ourself. Used to display TitleBgActive color and for selecting which window to use for NavWindowing
+    ImGuiWindow*            RootNavWindow;                      // Generally point to ourself. If we are a child window with the ImGuiWindowFlags_NavFlattenedChild flag, point to parent. Used to display TitleBgActive color and for selecting which window to use for NavWindowing.
 
     // Navigation / Focus
+    // FIXME-NAVIGATION: Merge all this with the new Nav system, at least the request variables should be moved to ImGuiContext
     int                     FocusIdxAllCounter;                 // Start at -1 and increase as assigned via FocusItemRegister()
     int                     FocusIdxTabCounter;                 // (same, but only count widgets which you can Tab through)
     int                     FocusIdxAllRequestCurrent;          // Item being requested for focus
@@ -879,13 +967,16 @@ namespace ImGui
     IMGUI_API ImGuiWindowSettings*  FindWindowSettings(ImGuiID id);
 
     IMGUI_API void          SetActiveID(ImGuiID id, ImGuiWindow* window);
+    IMGUI_API ImGuiID       GetActiveID();
+    IMGUI_API void          SetFocusID(ImGuiID id, ImGuiWindow* window);
     IMGUI_API void          ClearActiveID();
     IMGUI_API void          SetHoveredID(ImGuiID id);
+    IMGUI_API ImGuiID       GetHoveredID();
     IMGUI_API void          KeepAliveID(ImGuiID id);
 
     IMGUI_API void          ItemSize(const ImVec2& size, float text_offset_y = 0.0f);
     IMGUI_API void          ItemSize(const ImRect& bb, float text_offset_y = 0.0f);
-    IMGUI_API bool          ItemAdd(const ImRect& bb, ImGuiID id);
+    IMGUI_API bool          ItemAdd(const ImRect& bb, ImGuiID id, const ImRect* nav_bb = NULL);
     IMGUI_API bool          ItemHoverable(const ImRect& bb, ImGuiID id);
     IMGUI_API bool          IsClippedEx(const ImRect& bb, ImGuiID id, bool clip_even_when_logged);
     IMGUI_API bool          FocusableItemRegister(ImGuiWindow* window, ImGuiID id, bool tab_stop = true);      // Return true if focus is requested
@@ -901,6 +992,8 @@ namespace ImGui
     IMGUI_API bool          IsPopupOpen(ImGuiID id);
     IMGUI_API bool          BeginPopupEx(ImGuiID id, ImGuiWindowFlags extra_flags);
     IMGUI_API void          BeginTooltipEx(ImGuiWindowFlags extra_flags, bool override_previous_tooltip = true);
+
+    IMGUI_API void          NavInitWindow(ImGuiWindow* window, bool force_reinit);
 
     IMGUI_API int           CalcTypematicPressedRepeatAmount(float t, float t_prev, float repeat_delay, float repeat_rate);
 
@@ -928,6 +1021,7 @@ namespace ImGui
     IMGUI_API void          RenderTriangle(ImVec2 pos, ImGuiDir dir, float scale = 1.0f);
     IMGUI_API void          RenderBullet(ImVec2 pos);
     IMGUI_API void          RenderCheckMark(ImVec2 pos, ImU32 col, float sz);
+    IMGUI_API void          RenderNavHighlight(const ImRect& bb, ImGuiID id, ImGuiNavHighlightFlags flags = ImGuiNavHighlightFlags_TypeDefault); // Navigation highlight
     IMGUI_API void          RenderRectFilledRangeH(ImDrawList* draw_list, const ImRect& rect, ImU32 col, float x_start_norm, float x_end_norm, float rounding);
     IMGUI_API const char*   FindRenderedTextEnd(const char* text, const char* text_end = NULL); // Find the optional ## from which we stop displaying text.
 

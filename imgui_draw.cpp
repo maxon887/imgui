@@ -1,4 +1,4 @@
-// dear imgui, v1.53
+// dear imgui, v1.54 WIP
 // (drawing and font code)
 
 // Contains implementation for
@@ -173,6 +173,8 @@ void ImGui::StyleColorsClassic(ImGuiStyle* dst)
     colors[ImGuiCol_TextSelectedBg]         = ImVec4(0.00f, 0.00f, 1.00f, 0.35f);
     colors[ImGuiCol_ModalWindowDarkening]   = ImVec4(0.20f, 0.20f, 0.20f, 0.35f);
     colors[ImGuiCol_DragDropTarget]         = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+    colors[ImGuiCol_NavHighlight]           = colors[ImGuiCol_HeaderHovered];
+    colors[ImGuiCol_NavWindowingHighlight]  = ImVec4(1.00f, 1.00f, 1.00f, 0.12f);
 }
 
 void ImGui::StyleColorsDark(ImGuiStyle* dst)
@@ -223,6 +225,8 @@ void ImGui::StyleColorsDark(ImGuiStyle* dst)
     colors[ImGuiCol_TextSelectedBg]         = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
     colors[ImGuiCol_ModalWindowDarkening]   = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
     colors[ImGuiCol_DragDropTarget]         = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+    colors[ImGuiCol_NavHighlight]           = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    colors[ImGuiCol_NavWindowingHighlight]  = ImVec4(1.00f, 1.00f, 1.00f, 0.12f);
 }
 
 // Those light colors are better suited with a thicker font than the default one + FrameBorder
@@ -276,6 +280,8 @@ void ImGui::StyleColorsLight(ImGuiStyle* dst)
     colors[ImGuiCol_TextSelectedBg]         = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
     colors[ImGuiCol_ModalWindowDarkening]   = ImVec4(0.20f, 0.20f, 0.20f, 0.35f);
     colors[ImGuiCol_DragDropTarget]         = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
+    colors[ImGuiCol_NavHighlight]           = colors[ImGuiCol_HeaderHovered];
+    colors[ImGuiCol_NavWindowingHighlight]  = ImVec4(0.40f, 0.40f, 0.40f, 0.12f);
 }
 
 void ImGui::StyleColorsWarm(ImGuiStyle* dst)
@@ -1488,11 +1494,14 @@ void    ImFontAtlas::GetTexDataAsRGBA32(unsigned char** out_pixels, int* out_wid
     {
         unsigned char* pixels;
         GetTexDataAsAlpha8(&pixels, NULL, NULL);
-        TexPixelsRGBA32 = (unsigned int*)ImGui::MemAlloc((size_t)(TexWidth * TexHeight * 4));
-        const unsigned char* src = pixels;
-        unsigned int* dst = TexPixelsRGBA32;
-        for (int n = TexWidth * TexHeight; n > 0; n--)
-            *dst++ = IM_COL32(255, 255, 255, (unsigned int)(*src++));
+        if (pixels)
+        {
+            TexPixelsRGBA32 = (unsigned int*)ImGui::MemAlloc((size_t)(TexWidth * TexHeight * 4));
+            const unsigned char* src = pixels;
+            unsigned int* dst = TexPixelsRGBA32;
+            for (int n = TexWidth * TexHeight; n > 0; n--)
+                *dst++ = IM_COL32(255, 255, 255, (unsigned int)(*src++));
+        }
     }
 
     *out_pixels = (unsigned char*)TexPixelsRGBA32;
@@ -1732,6 +1741,7 @@ bool    ImFontAtlasBuildWithStbTruetype(ImFontAtlas* atlas)
         IM_ASSERT(font_offset >= 0);
         if (!stbtt_InitFont(&tmp.FontInfo, (unsigned char*)cfg.FontData, font_offset))
         {
+            atlas->TexWidth = atlas->TexHeight = 0; // Reset output on failure
             ImGui::MemFree(tmp_array);
             return false;
         }

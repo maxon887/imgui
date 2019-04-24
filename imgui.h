@@ -1,4 +1,4 @@
-// dear imgui, v1.53
+// dear imgui, v1.54 WIP
 // (headers)
 
 // See imgui.cpp file for documentation.
@@ -16,7 +16,8 @@
 #include <stddef.h>         // ptrdiff_t, NULL
 #include <string.h>         // memset, memmove, memcpy, strlen, strchr, strcpy, strcmp
 
-#define IMGUI_VERSION       "1.53"
+#define IMGUI_VERSION       "1.54 WIP"
+#define IMGUI_HAS_NAV       // navigation branch
 
 // Define attributes of all API symbols declarations, e.g. for DLL under Windows.
 #ifndef IMGUI_API
@@ -39,6 +40,7 @@
 #define IM_FMTLIST(FMT)
 #endif
 #define IM_ARRAYSIZE(_ARR)          ((int)(sizeof(_ARR)/sizeof(*_ARR)))
+#define IM_OFFSETOF(_TYPE,_ELM)     ((size_t)&(((_TYPE*)0)->_ELM))
 
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -79,6 +81,7 @@ typedef void* ImTextureID;          // user data to identify a texture (this is 
 typedef int ImGuiCol;               // enum: a color identifier for styling     // enum ImGuiCol_
 typedef int ImGuiCond;              // enum: a condition for Set*()             // enum ImGuiCond_
 typedef int ImGuiKey;               // enum: a key identifier (ImGui-side enum) // enum ImGuiKey_
+typedef int ImGuiNavInput;          // enum: an input identifier for navigation // enum ImGuiNavInput_
 typedef int ImGuiMouseCursor;       // enum: a mouse cursor identifier          // enum ImGuiMouseCursor_
 typedef int ImGuiStyleVar;          // enum: a variable identifier for styling  // enum ImGuiStyleVar_
 typedef int ImDrawCornerFlags;      // flags: for ImDrawList::AddRect*() etc.   // enum ImDrawCornerFlags_
@@ -315,6 +318,7 @@ namespace ImGui
 
     // Widgets: Drags (tip: ctrl+click on a drag box to input with keyboard. manually input values aren't clamped, can go off-bounds)
     // For all the Float2/Float3/Float4/Int2/Int3/Int4 versions of every functions, note that a 'float v[X]' function argument is the same as 'float* v', the array syntax is just a way to document the number of elements that are expected to be accessible. You can pass address of your first element out of a contiguous set, e.g. &myvector.x
+    // Speed are per-pixel of mouse movement (v_speed=0.2f: mouse needs to move by 5 pixels to increase value by 1). For gamepad/keyboard navigation, minimum speed is Max(v_speed, minimum_step_at_given_precision).
     IMGUI_API bool          DragFloat(const char* label, float* v, float v_speed = 1.0f, float v_min = 0.0f, float v_max = 0.0f, const char* display_format = "%.3f", float power = 1.0f);     // If v_min >= v_max we have no bound
     IMGUI_API bool          DragFloat2(const char* label, float v[2], float v_speed = 1.0f, float v_min = 0.0f, float v_max = 0.0f, const char* display_format = "%.3f", float power = 1.0f);
     IMGUI_API bool          DragFloat3(const char* label, float v[3], float v_speed = 1.0f, float v_min = 0.0f, float v_max = 0.0f, const char* display_format = "%.3f", float power = 1.0f);
@@ -383,7 +387,7 @@ namespace ImGui
     // Widgets: Selectable / Lists
     IMGUI_API bool          Selectable(const char* label, bool selected = false, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0,0));  // size.x==0.0: use remaining width, size.x>0.0: specify width. size.y==0.0: use label height, size.y>0.0: specify height
     IMGUI_API bool          Selectable(const char* label, bool* p_selected, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0,0));
-    IMGUI_API bool          ListBox(const char* label, int* current_item, const char* const* items, int items_count, int height_in_items = -1);
+    IMGUI_API bool          ListBox(const char* label, int* current_item, const char* const items[], int items_count, int height_in_items = -1);
     IMGUI_API bool          ListBox(const char* label, int* current_item, bool (*items_getter)(void* data, int idx, const char** out_text), void* data, int items_count, int height_in_items = -1);
     IMGUI_API bool          ListBoxHeader(const char* label, const ImVec2& size = ImVec2(0,0)); // use if you want to reimplement ListBox() will custom data or interactions. make sure to call ListBoxFooter() afterwards.
     IMGUI_API bool          ListBoxHeader(const char* label, int items_count, int height_in_items = -1); // "
@@ -439,6 +443,7 @@ namespace ImGui
     IMGUI_API bool          BeginDragDropTarget();                                                                  // call after submitting an item that may receive an item. If this returns true, you can call AcceptDragDropPayload() + EndDragDropTarget()
     IMGUI_API const ImGuiPayload* AcceptDragDropPayload(const char* type, ImGuiDragDropFlags flags = 0);            // accept contents of a given type. If ImGuiDragDropFlags_AcceptBeforeDelivery is set you can peek into the payload before the mouse button is released.
     IMGUI_API void          EndDragDropTarget();
+    IMGUI_API bool          IsDragDropActive();
 
     // Clipping
     IMGUI_API void          PushClipRect(const ImVec2& clip_rect_min, const ImVec2& clip_rect_max, bool intersect_with_current_clip_rect);
@@ -450,19 +455,21 @@ namespace ImGui
     IMGUI_API void          StyleColorsLight(ImGuiStyle* dst = NULL);
 	IMGUI_API void          StyleColorsWarm(ImGuiStyle* dst = NULL);
 
-    // Focus
-    // (FIXME: Those functions will be reworked after we merge the navigation branch + have a pass at focusing/tabbing features.)
-    // (Prefer using "SetItemDefaultFocus()" over "if (IsWindowAppearing()) SetScrollHere()" when applicable, to make your code more forward compatible when navigation branch is merged)
-    IMGUI_API void          SetItemDefaultFocus();                                              // make last item the default focused item of a window (WIP navigation branch only). Pleaase use instead of SetScrollHere().
+    // Focus, Activation
+    IMGUI_API void          ActivateItem(ImGuiID id);                                           // remotely activate a button, checkbox, tree node etc. given its unique ID. activation is queued and processed on the next frame when the item is encountered again.
+    IMGUI_API ImGuiID       GetItemID();                                                        // get id of previous item, generally ~GetID(label)
+    IMGUI_API void          SetItemDefaultFocus();                                              // make last item the default focused item of a window. Please use instead of "if (IsWindowAppearing()) SetScrollHere()" to signify "default item".
     IMGUI_API void          SetKeyboardFocusHere(int offset = 0);                               // focus keyboard on the next widget. Use positive 'offset' to access sub components of a multiple component widget. Use -1 to access previous widget.
 
     // Utilities
     IMGUI_API bool          IsItemHovered(ImGuiHoveredFlags flags = 0);                         // is the last item hovered? (and usable, aka not blocked by a popup, etc.). See ImGuiHoveredFlags for more options.
     IMGUI_API bool          IsItemActive();                                                     // is the last item active? (e.g. button being held, text field being edited- items that don't interact will always return false)
+    IMGUI_API bool          IsItemFocused();                                                    // is the last item focused for keyboard/gamepad navigation?
     IMGUI_API bool          IsItemClicked(int mouse_button = 0);                                // is the last item clicked? (e.g. button/node just clicked on)
     IMGUI_API bool          IsItemVisible();                                                    // is the last item visible? (aka not out of sight due to clipping/scrolling.)
     IMGUI_API bool          IsAnyItemHovered();
     IMGUI_API bool          IsAnyItemActive();
+    IMGUI_API bool          IsAnyItemFocused();
     IMGUI_API ImVec2        GetItemRectMin();                                                   // get bounding rectangle of last item, in screen space
     IMGUI_API ImVec2        GetItemRectMax();                                                   // "
     IMGUI_API ImVec2        GetItemRectSize();                                                  // get size of last item, in screen space
@@ -478,7 +485,6 @@ namespace ImGui
     IMGUI_API ImDrawList*   GetOverlayDrawList();                                               // this draw list will be the last rendered one, useful to quickly draw overlays shapes/text
     IMGUI_API ImDrawListSharedData* GetDrawListSharedData();
     IMGUI_API const char*   GetStyleColorName(ImGuiCol idx);
-    IMGUI_API ImVec2        CalcItemRectClosestPoint(const ImVec2& pos, bool on_edge = false, float outward = +0.0f);   // utility to find the closest point the last item bounding rectangle edge. useful to visually link items
     IMGUI_API ImVec2        CalcTextSize(const char* text, const char* text_end = NULL, bool hide_text_after_double_hash = false, float wrap_width = -1.0f);
     IMGUI_API void          CalcListClipping(int items_count, float items_height, int* out_items_display_start, int* out_items_display_end);    // calculate coarse clipping for large list of evenly sized items. Prefer using the ImGuiListClipper higher-level helper if you can.
 
@@ -549,6 +555,9 @@ enum ImGuiWindowFlags_
     ImGuiWindowFlags_AlwaysHorizontalScrollbar=1<< 15,  // Always show horizontal scrollbar (even if ContentSize.x < Size.x)
     ImGuiWindowFlags_AlwaysUseWindowPadding = 1 << 16,  // Ensure child windows without border uses style.WindowPadding (ignored by default for non-bordered child windows, because more convenient)
     ImGuiWindowFlags_ResizeFromAnySide      = 1 << 17,  // (WIP) Enable resize from any corners and borders. Your back-end needs to honor the different values of io.MouseCursor set by imgui.
+    ImGuiWindowFlags_NoNavFocus             = 1 << 18,  // No focusing of this window with gamepad/keyboard navigation
+    ImGuiWindowFlags_NoNavInputs            = 1 << 19,  // No gamepad/keyboard navigation within the window
+    //ImGuiWindowFlags_NavFlattened         = 1 << 20,  // Allow gamepad/keyboard navigation to cross over parent border to this child (only use on child that have no scrolling!)
 
     // [Internal]
     ImGuiWindowFlags_ChildWindow            = 1 << 24,  // Don't use! For internal use by BeginChild()
@@ -691,6 +700,33 @@ enum ImGuiKey_
     ImGuiKey_COUNT
 };
 
+// [BETA] Gamepad/Keyboard directional navigation
+// Fill ImGuiIO.NavInputs[] float array every frame to feed gamepad/keyboard navigation inputs.
+// 0.0f= not held. 1.0f= fully held. Pass intermediate 0.0f..1.0f values for analog triggers/sticks.
+// ImGui uses a simple >0.0f for activation testing, and won't attempt to test for a dead-zone.
+// Your code passing analog gamepad values is likely to want to transform your raw inputs, using a dead-zone and maybe a power curve.
+enum ImGuiNavInput_
+{
+    ImGuiNavInput_PadActivate,      // press button, tweak value                    // e.g. Circle button
+    ImGuiNavInput_PadCancel,        // close menu/popup/child, lose selection       // e.g. Cross button
+    ImGuiNavInput_PadInput,         // text input                                   // e.g. Triangle button
+    ImGuiNavInput_PadMenu,          // access menu, focus, move, resize             // e.g. Square button
+    ImGuiNavInput_PadUp,            // move up, resize window (with PadMenu held)   // e.g. D-pad up/down/left/right, analog
+    ImGuiNavInput_PadDown,          // move down
+    ImGuiNavInput_PadLeft,          // move left
+    ImGuiNavInput_PadRight,         // move right
+    ImGuiNavInput_PadScrollUp,      // scroll up, move window (with PadMenu held)   // e.g. right stick up/down/left/right, analog
+    ImGuiNavInput_PadScrollDown,    // "
+    ImGuiNavInput_PadScrollLeft,    //
+    ImGuiNavInput_PadScrollRight,   //
+    ImGuiNavInput_PadFocusPrev,     // next window (with PadMenu held)              // e.g. L-trigger
+    ImGuiNavInput_PadFocusNext,     // prev window (with PadMenu held)              // e.g. R-trigger
+    ImGuiNavInput_PadTweakSlow,     // slower tweaks                                // e.g. L-trigger, analog
+    ImGuiNavInput_PadTweakFast,     // faster tweaks                                // e.g. R-trigger, analog
+    ImGuiNavInput_KeyMenu,          // access menu                                  // e.g. ALT
+    ImGuiNavInput_COUNT,
+};
+
 // Enumeration for PushStyleColor() / PopStyleColor()
 enum ImGuiCol_
 {
@@ -737,6 +773,8 @@ enum ImGuiCol_
     ImGuiCol_TextSelectedBg,
     ImGuiCol_ModalWindowDarkening,  // darken entire screen when a modal window is active
     ImGuiCol_DragDropTarget,
+    ImGuiCol_NavHighlight,          // gamepad/keyboard: current highlighted item 
+    ImGuiCol_NavWindowingHighlight, // gamepad/keyboard: when holding NavMenu to focus/move/resize windows
     ImGuiCol_COUNT
 
     // Obsolete names (will be removed)
@@ -891,6 +929,7 @@ struct ImGuiIO
     int           KeyMap[ImGuiKey_COUNT];   // <unset>              // Map of indices into the KeysDown[512] entries array
     float         KeyRepeatDelay;           // = 0.250f             // When holding a key/button, time before it starts repeating, in seconds (for buttons in Repeat mode, etc.).
     float         KeyRepeatRate;            // = 0.050f             // When holding a key/button, rate at which it repeats, in seconds.
+    bool          NavMovesMouse;            // = false              // Directional navigation can move the mouse cursor. Updates MousePos and set WantMoveMouse=true. If enabled you MUST honor those requests in your binding, otherwise ImGui will react as if mouse is jumping around.
     void*         UserData;                 // = NULL               // Store your own data for retrieval by callbacks.
 
     ImFontAtlas*  Fonts;                    // <auto>               // Load and assemble one or more fonts into a single tightly packed texture. Output to Fonts array.
@@ -944,6 +983,7 @@ struct ImGuiIO
     bool        KeySuper;                   // Keyboard modifier pressed: Cmd/Super/Windows
     bool        KeysDown[512];              // Keyboard keys that are pressed (in whatever storage order you naturally have access to keyboard data)
     ImWchar     InputCharacters[16+1];      // List of characters input (translated by user from keypress+keyboard state). Fill using AddInputCharacter() helper.
+    float       NavInputs[ImGuiNavInput_COUNT];
 
     // Functions
     IMGUI_API void AddInputCharacter(ImWchar c);                        // Add new character into InputCharacters[]
@@ -957,7 +997,9 @@ struct ImGuiIO
     bool        WantCaptureMouse;           // When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application. This is set by ImGui when it wants to use your mouse (e.g. unclicked mouse is hovering a window, or a widget is active). 
     bool        WantCaptureKeyboard;        // When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application. This is set by ImGui when it wants to use your keyboard inputs.
     bool        WantTextInput;              // Mobile/console: when io.WantTextInput is true, you may display an on-screen keyboard. This is set by ImGui when it wants textual keyboard input to happen (e.g. when a InputText widget is active).
-    bool        WantMoveMouse;              // [BETA-NAV] MousePos has been altered, back-end should reposition mouse on next frame. Set only when 'NavMovesMouse=true'.
+    bool        WantMoveMouse;              // MousePos has been altered, back-end should reposition mouse on next frame. Set only when 'NavMovesMouse=true'.
+    bool        NavUsable;                  // Directional navigation is currently allowed (will handle ImGuiKey_NavXXX events).
+    bool        NavActive;                  // Directional navigation is active/visible and currently allowed (will handle ImGuiKey_NavXXX events).
     float       Framerate;                  // Application framerate estimation, in frame per second. Solely for convenience. Rolling average estimation based on IO.DeltaTime over 120 frames
     int         MetricsAllocs;              // Number of active memory allocations
     int         MetricsRenderVertices;      // Vertices output during last call to Render()
@@ -982,30 +1024,38 @@ struct ImGuiIO
     float       MouseDragMaxDistanceSqr[5]; // Squared maximum distance of how much mouse has traveled from the clicking point
     float       KeysDownDuration[512];      // Duration the keyboard key has been down (0.0f == just pressed)
     float       KeysDownDurationPrev[512];  // Previous duration the key has been down
+    float       NavInputsDownDuration[ImGuiNavInput_COUNT];
+    float       NavInputsDownDurationPrev[ImGuiNavInput_COUNT];
 
     IMGUI_API   ImGuiIO();
 };
 
 //-----------------------------------------------------------------------------
-// Obsolete functions (Will be removed! Also see 'API BREAKING CHANGES' section in imgui.cpp)
+// Obsolete functions (Will be removed! Read 'API BREAKING CHANGES' section in imgui.cpp for details)
 //-----------------------------------------------------------------------------
 
 #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
 namespace ImGui
 {
-    static inline void  ShowTestWindow() { return ShowDemoWindow(); } // OBSOLETE 1.53+
-    static inline bool  IsRootWindowFocused() { return IsWindowFocused(ImGuiFocusedFlags_RootWindow); } // OBSOLETE 1.53+
-    static inline bool  IsRootWindowOrAnyChildFocused() { return IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows); } // OBSOLETE 1.53+
-    static inline void  SetNextWindowContentWidth(float width) { SetNextWindowContentSize(ImVec2(width, 0.0f)); } // OBSOLETE 1.53+ (nb: original version preserved last Y value set by SetNextWindowContentSize())
-    static inline bool  IsRootWindowOrAnyChildHovered(ImGuiHoveredFlags flags = 0) { return IsItemHovered(flags | ImGuiHoveredFlags_RootWindow | ImGuiHoveredFlags_ChildWindows); } // OBSOLETE 1.53+ use flags directly
-    bool                    Begin(const char* name, bool* p_open, const ImVec2& size_on_first_use, float bg_alpha_override = -1.0f, ImGuiWindowFlags flags = 0); // OBSOLETE 1.52+. use SetNextWindowSize() instead if you want to set a window size.
-    static inline void      AlignFirstTextHeightToWidgets() { AlignTextToFramePadding(); }     // OBSOLETE 1.52+
-    static inline void      SetNextWindowPosCenter(ImGuiCond cond = 0) { SetNextWindowPos(ImVec2(GetIO().DisplaySize.x * 0.5f, GetIO().DisplaySize.y * 0.5f), cond, ImVec2(0.5f, 0.5f)); } // OBSOLETE 1.52+
-    static inline bool      IsItemHoveredRect() { return IsItemHovered(ImGuiHoveredFlags_RectOnly); } // OBSOLETE 1.51+
-    static inline bool      IsPosHoveringAnyWindow(const ImVec2&) { IM_ASSERT(0); return false; } // OBSOLETE 1.51+. This was partly broken. You probably wanted to use ImGui::GetIO().WantCaptureMouse instead.
-    static inline bool      IsMouseHoveringAnyWindow() { return IsAnyWindowHovered(); }        // OBSOLETE 1.51+
-    static inline bool      IsMouseHoveringWindow() { return IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem); } // OBSOLETE 1.51+
-    static inline bool      CollapsingHeader(const char* label, const char* str_id, bool framed = true, bool default_open = false) { (void)str_id; (void)framed; ImGuiTreeNodeFlags default_open_flags = 1 << 5; return CollapsingHeader(label, (default_open ? default_open_flags : 0)); } // OBSOLETE 1.49+
+    // OBSOLETED in 1.54 (from Dec 2017)
+    static inline ImVec2 CalcItemRectClosestPoint(const ImVec2& pos, bool on_edge = false, float outward = 0.f) { (void)on_edge; (void)outward; IM_ASSERT(0); return pos; }
+    // OBSOLETED in 1.53 (between Oct 2017 and Dec 2017)
+    static inline void  ShowTestWindow()                      { return ShowDemoWindow(); }
+    static inline bool  IsRootWindowFocused()                 { return IsWindowFocused(ImGuiFocusedFlags_RootWindow); }
+    static inline bool  IsRootWindowOrAnyChildFocused()       { return IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows); }
+    static inline void  SetNextWindowContentWidth(float w)    { SetNextWindowContentSize(ImVec2(w, 0.0f)); }
+    // OBSOLETED in 1.52 (between Aug 2017 and Oct 2017)
+    bool                Begin(const char* name, bool* p_open, const ImVec2& size_on_first_use, float bg_alpha_override = -1.0f, ImGuiWindowFlags flags = 0); // Use SetNextWindowSize() instead if you want to set a window size.
+    static inline bool  IsRootWindowOrAnyChildHovered()       { return IsItemHovered(ImGuiHoveredFlags_RootAndChildWindows); }  // Use flags directly!
+    static inline void  AlignFirstTextHeightToWidgets()       { AlignTextToFramePadding(); }
+    static inline void  SetNextWindowPosCenter(ImGuiCond c=0) { ImGuiIO& io = GetIO(); SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), c, ImVec2(0.5f, 0.5f)); }
+    // OBSOLETED in 1.51 (between Jun 2017 and Aug 2017)
+    static inline bool  IsItemHoveredRect()                   { return IsItemHovered(ImGuiHoveredFlags_RectOnly); }
+    static inline bool  IsPosHoveringAnyWindow(const ImVec2&) { IM_ASSERT(0); return false; } // This was misleading and partly broken. You probably want to use the ImGui::GetIO().WantCaptureMouse flag instead.
+    static inline bool  IsMouseHoveringAnyWindow()            { return IsAnyWindowHovered(); }
+    static inline bool  IsMouseHoveringWindow()               { return IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem); }
+    // OBSOLETED IN 1.49 (between Apr 2016 and May 2016)
+    static inline bool  CollapsingHeader(const char* label, const char* str_id, bool framed = true, bool default_open = false) { (void)str_id; (void)framed; ImGuiTreeNodeFlags default_open_flags = 1 << 5; return CollapsingHeader(label, (default_open ? default_open_flags : 0)); }
 }
 #endif
 
