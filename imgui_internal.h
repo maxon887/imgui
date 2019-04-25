@@ -36,7 +36,7 @@ struct ImRect;
 struct ImGuiColMod;
 struct ImGuiStyleMod;
 struct ImGuiGroupData;
-struct ImGuiSimpleColumns;
+struct ImGuiMenuColumns;
 struct ImGuiDrawContext;
 struct ImGuiTextEditState;
 struct ImGuiMouseCursorData;
@@ -136,8 +136,8 @@ static inline int    ImMin(int lhs, int rhs)                                    
 static inline int    ImMax(int lhs, int rhs)                                    { return lhs >= rhs ? lhs : rhs; }
 static inline float  ImMin(float lhs, float rhs)                                { return lhs < rhs ? lhs : rhs; }
 static inline float  ImMax(float lhs, float rhs)                                { return lhs >= rhs ? lhs : rhs; }
-static inline ImVec2 ImMin(const ImVec2& lhs, const ImVec2& rhs)                { return ImVec2(ImMin(lhs.x,rhs.x), ImMin(lhs.y,rhs.y)); }
-static inline ImVec2 ImMax(const ImVec2& lhs, const ImVec2& rhs)                { return ImVec2(ImMax(lhs.x,rhs.x), ImMax(lhs.y,rhs.y)); }
+static inline ImVec2 ImMin(const ImVec2& lhs, const ImVec2& rhs)                { return ImVec2(lhs.x < rhs.x ? lhs.x : rhs.x, lhs.y < rhs.y ? lhs.y : rhs.y); }
+static inline ImVec2 ImMax(const ImVec2& lhs, const ImVec2& rhs)                { return ImVec2(lhs.x >= rhs.x ? lhs.x : rhs.x, lhs.y >= rhs.y ? lhs.y : rhs.y); }
 static inline int    ImClamp(int v, int mn, int mx)                             { return (v < mn) ? mn : (v > mx) ? mx : v; }
 static inline float  ImClamp(float v, float mn, float mx)                       { return (v < mn) ? mn : (v > mx) ? mx : v; }
 static inline ImVec2 ImClamp(const ImVec2& f, const ImVec2& mn, ImVec2 mx)      { return ImVec2(ImClamp(f.x,mn.x,mx.x), ImClamp(f.y,mn.y,mx.y)); }
@@ -303,7 +303,8 @@ struct IMGUI_API ImRect
     void        Expand(const float amount)          { Min.x -= amount;   Min.y -= amount;   Max.x += amount;   Max.y += amount; }
     void        Expand(const ImVec2& amount)        { Min.x -= amount.x; Min.y -= amount.y; Max.x += amount.x; Max.y += amount.y; }
     void        Translate(const ImVec2& v)          { Min.x += v.x; Min.y += v.y; Max.x += v.x; Max.y += v.y; }
-    void        ClipWith(const ImRect& r)           { if (Min.x < r.Min.x) Min.x = r.Min.x; if (Min.y < r.Min.y) Min.y = r.Min.y; if (Max.x > r.Max.x) Max.x = r.Max.x; if (Max.y > r.Max.y) Max.y = r.Max.y; }
+    void        ClipWith(const ImRect& r)           { Min = ImMax(Min, r.Min); Max = ImMin(Max, r.Max); }                   // Simple version, may lead to an inverted rectangle, which is fine for Contains/Overlaps test but not for display.
+    void        ClipWithFull(const ImRect& r)       { Min = ImClamp(Min, r.Min, r.Max); Max = ImClamp(Max, r.Min, r.Max); } // Full version, ensure both points are fully clipped.
     void        Floor()                             { Min.x = (float)(int)Min.x; Min.y = (float)(int)Min.y; Max.x = (float)(int)Max.x; Max.y = (float)(int)Max.y; }
     void        FixInverted()                       { if (Min.x > Max.x) ImSwap(Min.x, Max.x); if (Min.y > Max.y) ImSwap(Min.y, Max.y); }
     bool        IsFinite() const                    { return Min.x != FLT_MAX; }
@@ -341,14 +342,14 @@ struct ImGuiGroupData
 };
 
 // Simple column measurement currently used for MenuItem() only. This is very short-sighted/throw-away code and NOT a generic helper.
-struct IMGUI_API ImGuiSimpleColumns
+struct IMGUI_API ImGuiMenuColumns
 {
     int         Count;
     float       Spacing;
     float       Width, NextWidth;
-    float       Pos[8], NextWidths[8];
+    float       Pos[4], NextWidths[4];
 
-    ImGuiSimpleColumns();
+    ImGuiMenuColumns();
     void        Update(int count, float spacing, bool clear);
     float       DeclColumns(float w0, float w1, float w2);
     float       CalcExtraSpace(float avail_w);
@@ -394,9 +395,12 @@ struct ImGuiSettingsHandler
 {
     const char* TypeName;   // Short description stored in .ini file. Disallowed characters: '[' ']'  
     ImGuiID     TypeHash;   // == ImHash(TypeName, 0, 0)
-    void*       (*ReadOpenFn)(ImGuiContext& ctx, const char* name);
-    void        (*ReadLineFn)(ImGuiContext& ctx, void* entry, const char* line);
-    void        (*WriteAllFn)(ImGuiContext& ctx, ImGuiTextBuffer* out_buf);
+    void*       (*ReadOpenFn)(ImGuiContext* ctx, ImGuiSettingsHandler* handler, const char* name);
+    void        (*ReadLineFn)(ImGuiContext* ctx, ImGuiSettingsHandler* handler, void* entry, const char* line);
+    void        (*WriteAllFn)(ImGuiContext* ctx, ImGuiSettingsHandler* handler, ImGuiTextBuffer* out_buf);
+    void*       UserData;
+
+    ImGuiSettingsHandler() { memset(this, 0, sizeof(*this)); }
 };
 
 // Mouse cursor data (used when io.MouseDrawCursor is set)
@@ -415,11 +419,10 @@ struct ImGuiPopupRef
     ImGuiID             PopupId;        // Set on OpenPopup()
     ImGuiWindow*        Window;         // Resolved on BeginPopup() - may stay unresolved if user never calls OpenPopup()
     ImGuiWindow*        ParentWindow;   // Set on OpenPopup()
-    ImGuiID             ParentMenuSet;  // Set on OpenPopup()
-    ImVec2              PopupPosOnOpen; // Preferred popup position (typically == MousePosOnOpen when using mouse)
-    ImVec2              MousePosOnOpen; // Copy of mouse position at the time of opening popup
-
-    ImGuiPopupRef(ImGuiID id, ImGuiWindow* parent_window, ImGuiID parent_menu_set, const ImVec2& popup_pos, const ImVec2& mouse_pos) { PopupId = id; Window = NULL; ParentWindow = parent_window; ParentMenuSet = parent_menu_set; PopupPosOnOpen = popup_pos; MousePosOnOpen = mouse_pos; }
+    int                 OpenFrameCount; // Set on OpenPopup()
+    ImGuiID             OpenParentId;   // Set on OpenPopup(), we need this to differenciate multiple menu sets from each others (e.g. inside menu bar vs loose menu items)
+    ImVec2              OpenPopupPos;   // Set on OpenPopup(), preferred popup position (typically == OpenMousePos when using mouse)
+    ImVec2              OpenMousePos;   // Set on OpenPopup(), copy of mouse position at the time of opening popup
 };
 
 struct ImGuiColumnData
@@ -478,6 +481,41 @@ struct ImDrawListSharedData
     ImDrawListSharedData();
 };
 
+// Storage for SetNexWindow** functions
+struct ImGuiNextWindowData
+{
+    ImGuiCond               PosCond;
+    ImGuiCond               SizeCond;
+    ImGuiCond               ContentSizeCond;
+    ImGuiCond               CollapsedCond;
+    ImGuiCond               SizeConstraintCond;
+    ImGuiCond               FocusCond;
+    ImVec2                  PosVal;
+    ImVec2                  PosPivotVal;
+    ImVec2                  SizeVal;
+    ImVec2                  ContentSizeVal;
+    bool                    CollapsedVal;
+    ImRect                  SizeConstraintRect;                 // Valid if 'SetNextWindowSizeConstraint' is true
+    ImGuiSizeCallback       SizeCallback;
+    void*                   SizeCallbackUserData;
+
+    ImGuiNextWindowData()
+    {
+        PosCond = SizeCond = ContentSizeCond = CollapsedCond = SizeConstraintCond = FocusCond = 0;
+        PosVal = PosPivotVal = SizeVal = ImVec2(0.0f, 0.0f);
+        ContentSizeVal = ImVec2(0.0f, 0.0f);
+        CollapsedVal = false;
+        SizeConstraintRect = ImRect();
+        SizeCallback = NULL;
+        SizeCallbackUserData = NULL;
+    }
+
+    void    Clear()
+    {
+        PosCond = SizeCond = ContentSizeCond = CollapsedCond = SizeConstraintCond = FocusCond = 0;
+    }
+};
+
 // Main state for ImGui
 struct ImGuiContext
 {
@@ -522,6 +560,9 @@ struct ImGuiContext
     ImVector<ImFont*>       FontStack;                          // Stack for PushFont()/PopFont()
     ImVector<ImGuiPopupRef> OpenPopupStack;                     // Which popups are open (persistent)
     ImVector<ImGuiPopupRef> CurrentPopupStack;                  // Which level of BeginPopup() we are in (reset every frame)
+    ImGuiNextWindowData     NextWindowData;                     // Storage for SetNextWindow** functions
+    bool                    NextTreeNodeOpenVal;                // Storage for SetNextTreeNode** functions
+    ImGuiCond               NextTreeNodeOpenCond;
 
     // Navigation data (for gamepad/keyboard)
     ImGuiWindow*            NavWindow;                          // Focused window for navigation. Could be called 'FocusWindow'
@@ -558,24 +599,6 @@ struct ImGuiContext
     float                   NavMoveResultDistCenter;            // Best move request candidate center distance to current NavId
     float                   NavMoveResultDistAxial;
     ImRect                  NavMoveResultRectRel;               // Best move request candidate bounding box in window relative space
-
-    // Storage for SetNexWindow** and SetNextTreeNode*** functions
-    ImVec2                  SetNextWindowPosVal;
-    ImVec2                  SetNextWindowPosPivot;
-    ImVec2                  SetNextWindowSizeVal;
-    ImVec2                  SetNextWindowContentSizeVal;
-    bool                    SetNextWindowCollapsedVal;
-    ImGuiCond               SetNextWindowPosCond;
-    ImGuiCond               SetNextWindowSizeCond;
-    ImGuiCond               SetNextWindowContentSizeCond;
-    ImGuiCond               SetNextWindowCollapsedCond;
-    ImRect                  SetNextWindowSizeConstraintRect;           // Valid if 'SetNextWindowSizeConstraint' is true
-    ImGuiSizeConstraintCallback SetNextWindowSizeConstraintCallback;
-    void*                   SetNextWindowSizeConstraintCallbackUserData;
-    bool                    SetNextWindowSizeConstraint;
-    bool                    SetNextWindowFocus;
-    bool                    SetNextTreeNodeOpenVal;
-    ImGuiCond               SetNextTreeNodeOpenCond;
 
     // Render
     ImDrawData              RenderDrawData;                     // Main ImDrawData instance to pass render information to the user
@@ -667,6 +690,9 @@ struct ImGuiContext
         MovingWindow = NULL;
         MovingWindowMoveId = 0;
 
+        NextTreeNodeOpenVal = false;
+        NextTreeNodeOpenCond = 0;
+
         NavWindow = NULL;
         NavId = NavActivateId = NavActivateDownId = NavInputId = 0;
         NavJustTabbedId = NavJustMovedToId = NavNextActivateId = 0;
@@ -691,21 +717,6 @@ struct ImGuiContext
         NavMoveResultId = 0;
         NavMoveResultParentId = 0;
         NavMoveResultDistBox = NavMoveResultDistCenter = NavMoveResultDistAxial = 0.0f;
-
-        SetNextWindowPosVal = ImVec2(0.0f, 0.0f);
-        SetNextWindowSizeVal = ImVec2(0.0f, 0.0f);
-        SetNextWindowCollapsedVal = false;
-        SetNextWindowPosCond = 0;
-        SetNextWindowSizeCond = 0;
-        SetNextWindowContentSizeCond = 0;
-        SetNextWindowCollapsedCond = 0;
-        SetNextWindowSizeConstraintRect = ImRect();
-        SetNextWindowSizeConstraintCallback = NULL;
-        SetNextWindowSizeConstraintCallbackUserData = NULL;
-        SetNextWindowSizeConstraint = false;
-        SetNextWindowFocus = false;
-        SetNextTreeNodeOpenVal = false;
-        SetNextTreeNodeOpenCond = 0;
 
         DragDropActive = false;
         DragDropSourceFlags = 0;
@@ -859,7 +870,7 @@ struct IMGUI_API ImGuiWindow
     ImVec2                  ScrollTargetCenterRatio;            // 0.0f = scroll so that target position is at top, 0.5f = scroll so that target position is centered
     bool                    ScrollbarX, ScrollbarY;
     ImVec2                  ScrollbarSizes;
-    bool                    Active;                             // Set to true on Begin()
+    bool                    Active;                             // Set to true on Begin(), unless Collapsed
     bool                    WasActive;
     bool                    WriteAccessed;                      // Set to true when any widget access the current window
     bool                    Collapsed;                          // Set when collapsing window to become only title-bar
@@ -892,7 +903,7 @@ struct IMGUI_API ImGuiWindow
     ImRect                  InnerRect;
     int                     LastFrameActive;
     float                   ItemWidthDefault;
-    ImGuiSimpleColumns      MenuColumns;                        // Simplified columns storage for menu items
+    ImGuiMenuColumns        MenuColumns;                        // Simplified columns storage for menu items
     ImGuiStorage            StateStorage;
     ImVector<ImGuiColumnsSet> ColumnsStorage;
     float                   FontWindowScale;                    // Scale multiplier per-window
@@ -963,7 +974,7 @@ namespace ImGui
     IMGUI_API void          Initialize();
 
     IMGUI_API void                  MarkIniSettingsDirty();
-    IMGUI_API ImGuiSettingsHandler* FindSettingsHandler(ImGuiID type_id);
+    IMGUI_API ImGuiSettingsHandler* FindSettingsHandler(const char* type_name);
     IMGUI_API ImGuiWindowSettings*  FindWindowSettings(ImGuiID id);
 
     IMGUI_API void          SetActiveID(ImGuiID id, ImGuiWindow* window);
@@ -987,7 +998,7 @@ namespace ImGui
     IMGUI_API void          PushItemFlag(ImGuiItemFlags option, bool enabled);
     IMGUI_API void          PopItemFlag();
 
-    IMGUI_API void          OpenPopupEx(ImGuiID id, bool reopen_existing);
+    IMGUI_API void          OpenPopupEx(ImGuiID id);
     IMGUI_API void          ClosePopup(ImGuiID id);
     IMGUI_API bool          IsPopupOpen(ImGuiID id);
     IMGUI_API bool          BeginPopupEx(ImGuiID id, ImGuiWindowFlags extra_flags);
