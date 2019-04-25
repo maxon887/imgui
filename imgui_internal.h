@@ -39,7 +39,6 @@ struct ImGuiGroupData;
 struct ImGuiMenuColumns;
 struct ImGuiDrawContext;
 struct ImGuiTextEditState;
-struct ImGuiMouseCursorData;
 struct ImGuiPopupRef;
 struct ImGuiWindow;
 struct ImGuiWindowSettings;
@@ -171,9 +170,6 @@ template <typename T> void IM_DELETE(T*& p) { if (p) { p->~T(); ImGui::MemFree(p
 //-----------------------------------------------------------------------------
 // Types
 //-----------------------------------------------------------------------------
-
-// Internal Drag and Drop payload types. String starting with '_' are reserved for Dear ImGui.
-#define IMGUI_PAYLOAD_TYPE_DOCKABLE         "_IMDOCK"   // ImGuiWindow* // [Internal] Docking/tabs
 
 enum ImGuiButtonFlags_
 {
@@ -375,7 +371,7 @@ struct IMGUI_API ImGuiTextEditState
     void                CursorClamp()               { StbState.cursor = ImMin(StbState.cursor, CurLenW); StbState.select_start = ImMin(StbState.select_start, CurLenW); StbState.select_end = ImMin(StbState.select_end, CurLenW); }
     bool                HasSelection() const        { return StbState.select_start != StbState.select_end; }
     void                ClearSelection()            { StbState.select_start = StbState.select_end = StbState.cursor; }
-    void                SelectAll()                 { StbState.select_start = 0; StbState.select_end = CurLenW; StbState.cursor = StbState.select_end; StbState.has_preferred_x = false; }
+    void                SelectAll()                 { StbState.select_start = 0; StbState.cursor = StbState.select_end = CurLenW; StbState.has_preferred_x = false; }
     void                OnKeyPressed(int key);
 };
 
@@ -401,16 +397,6 @@ struct ImGuiSettingsHandler
     void*       UserData;
 
     ImGuiSettingsHandler() { memset(this, 0, sizeof(*this)); }
-};
-
-// Mouse cursor data (used when io.MouseDrawCursor is set)
-struct ImGuiMouseCursorData
-{
-    ImGuiMouseCursor    Type;
-    ImVec2              HotOffset;
-    ImVec2              Size;
-    ImVec2              TexUvMin[2];
-    ImVec2              TexUvMax[2];
 };
 
 // Storage for current popup stack
@@ -466,7 +452,7 @@ struct ImGuiColumnsSet
     }
 };
 
-struct ImDrawListSharedData
+struct IMGUI_API ImDrawListSharedData
 {
     ImVec2          TexUvWhitePixel;            // UV of white pixel in the atlas
     ImFont*         Font;                       // Current/default font (optional, for simplified AddText overload)
@@ -479,6 +465,15 @@ struct ImDrawListSharedData
     ImVec2          CircleVtx12[12];
 
     ImDrawListSharedData();
+};
+
+struct ImDrawDataBuilder
+{
+    ImVector<ImDrawList*>   Layers[2];           // Global layers for: regular, tooltip
+
+    void Clear()            { for (int n = 0; n < IM_ARRAYSIZE(Layers); n++) Layers[n].resize(0); }
+    void ClearFreeMemory()  { for (int n = 0; n < IM_ARRAYSIZE(Layers); n++) Layers[n].clear(); }
+    IMGUI_API void FlattenIntoSingleLayer();
 };
 
 // Storage for SetNexWindow** functions
@@ -553,7 +548,7 @@ struct ImGuiContext
     ImVec2                  ActiveIdClickOffset;                // Clicked offset from upper-left corner, if applicable (currently only set by ButtonBehavior)
     ImGuiWindow*            ActiveIdWindow;
     ImGuiInputSource        ActiveIdSource;                     // Activating with mouse or nav (gamepad/keyboard)
-    ImGuiWindow*            MovingWindow;                       // Track the child window we clicked on to move a window.
+    ImGuiWindow*            MovingWindow;                       // Track the window we clicked on (in order to preserve focus). The actually window that is moved is generally MovingWindow->RootWindow.
     ImGuiID                 MovingWindowMoveId;                 // == MovingWindow->MoveId
     ImVector<ImGuiColMod>   ColorModifiers;                     // Stack for PushStyleColor()/PopStyleColor()
     ImVector<ImGuiStyleMod> StyleModifiers;                     // Stack for PushStyleVar()/PopStyleVar()
@@ -574,7 +569,7 @@ struct ImGuiContext
     ImGuiID                 NavNextActivateId;                  // Set by ActivateItem(), queued until next frame
     ImGuiID                 NavJustMovedToId;                   // Just navigated to this id (result of a successfully MoveRequest)
     ImRect                  NavScoringRectScreen;               // Rectangle used for scoring, in screen space. Based of window->DC.NavRefRectRel[], modified for directional navigation scoring.
-    ImGuiWindow*            NavWindowingTarget;
+    ImGuiWindow*            NavWindowingTarget;                 // When selecting a window (holding Menu+FocusPrev/Next, or equivalent of CTRL-TAB) this window is temporarily displayed front-most. 
     float                   NavWindowingDisplayAlpha;
     bool                    NavWindowingToggleLayer;
     int                     NavLayer;                           // Layer we are navigating on. For now the system is hard-coded for 0=main contents and 1=menu/title bar, may expose layers later.
@@ -601,12 +596,11 @@ struct ImGuiContext
     ImRect                  NavMoveResultRectRel;               // Best move request candidate bounding box in window relative space
 
     // Render
-    ImDrawData              RenderDrawData;                     // Main ImDrawData instance to pass render information to the user
-    ImVector<ImDrawList*>   RenderDrawLists[3];
+    ImDrawData              DrawData;                           // Main ImDrawData instance to pass render information to the user
+    ImDrawDataBuilder       DrawDataBuilder;
     float                   ModalWindowDarkeningRatio;
     ImDrawList              OverlayDrawList;                    // Optional software render of mouse cursors, if io.MouseDrawCursor is set + a few debug overlays
     ImGuiMouseCursor        MouseCursor;
-    ImGuiMouseCursorData    MouseCursorData[ImGuiMouseCursor_Count_];
 
     // Drag and Drop
     bool                    DragDropActive;
@@ -689,7 +683,6 @@ struct ImGuiContext
         ActiveIdSource = ImGuiInputSource_None;
         MovingWindow = NULL;
         MovingWindowMoveId = 0;
-
         NextTreeNodeOpenVal = false;
         NextTreeNodeOpenCond = 0;
 
@@ -718,10 +711,16 @@ struct ImGuiContext
         NavMoveResultParentId = 0;
         NavMoveResultDistBox = NavMoveResultDistCenter = NavMoveResultDistAxial = 0.0f;
 
+        ModalWindowDarkeningRatio = 0.0f;
+        OverlayDrawList._Data = &DrawListSharedData;
+        OverlayDrawList._OwnerName = "##Overlay"; // Give it a name for debugging
+        MouseCursor = ImGuiMouseCursor_Arrow;
+
         DragDropActive = false;
         DragDropSourceFlags = 0;
         DragDropMouseButton = -1;
         DragDropTargetId = 0;
+        DragDropAcceptIdCurrRectSurface = 0.0f;
         DragDropAcceptIdPrev = DragDropAcceptIdCurr = 0;
         DragDropAcceptFrameCount = -1;
         memset(DragDropPayloadBufLocal, 0, sizeof(DragDropPayloadBufLocal));
@@ -736,12 +735,6 @@ struct ImGuiContext
         ScrollbarClickDeltaToGrabCenter = ImVec2(0.0f, 0.0f);
         TooltipOverrideCount = 0;
         OsImePosRequest = OsImePosSet = ImVec2(-1.0f, -1.0f);
-
-        ModalWindowDarkeningRatio = 0.0f;
-        OverlayDrawList._Data = &DrawListSharedData;
-        OverlayDrawList._OwnerName = "##Overlay"; // Give it a name for debugging
-        MouseCursor = ImGuiMouseCursor_Arrow;
-        memset(MouseCursorData, 0, sizeof(MouseCursorData));
 
         SettingsDirtyTimer = 0.0f;
 		SaveSettings = true;
@@ -914,7 +907,7 @@ struct IMGUI_API ImGuiWindow
     ImGuiWindow*            RootNavWindow;                      // Generally point to ourself. If we are a child window with the ImGuiWindowFlags_NavFlattenedChild flag, point to parent. Used to display TitleBgActive color and for selecting which window to use for NavWindowing.
 
     // Navigation / Focus
-    // FIXME-NAVIGATION: Merge all this with the new Nav system, at least the request variables should be moved to ImGuiContext
+    // FIXME-NAV: Merge all this with the new Nav system, at least the request variables should be moved to ImGuiContext
     int                     FocusIdxAllCounter;                 // Start at -1 and increase as assigned via FocusItemRegister()
     int                     FocusIdxTabCounter;                 // (same, but only count widgets which you can Tab through)
     int                     FocusIdxAllRequestCurrent;          // Item being requested for focus
@@ -998,6 +991,8 @@ namespace ImGui
     IMGUI_API void          PushItemFlag(ImGuiItemFlags option, bool enabled);
     IMGUI_API void          PopItemFlag();
 
+    IMGUI_API void          SetCurrentFont(ImFont* font);
+
     IMGUI_API void          OpenPopupEx(ImGuiID id);
     IMGUI_API void          ClosePopup(ImGuiID id);
     IMGUI_API bool          IsPopupOpen(ImGuiID id);
@@ -1005,6 +1000,7 @@ namespace ImGui
     IMGUI_API void          BeginTooltipEx(ImGuiWindowFlags extra_flags, bool override_previous_tooltip = true);
 
     IMGUI_API void          NavInitWindow(ImGuiWindow* window, bool force_reinit);
+    IMGUI_API void          ActivateItem(ImGuiID id);   // Remotely activate a button, checkbox, tree node etc. given its unique ID. activation is queued and processed on the next frame when the item is encountered again.
 
     IMGUI_API int           CalcTypematicPressedRepeatAmount(float t, float t_prev, float repeat_delay, float repeat_rate);
 
