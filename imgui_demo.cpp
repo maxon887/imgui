@@ -5879,7 +5879,7 @@ void ImGui::ShowStyleEditor(ImGuiStyle* ref)
 		file.name = "Style.ui";
 		file.data = (Byte*)colors;
 		file.size = sizeof(ImVec4) * ImGuiCol_COUNT;
-		cross::system->SaveDataFile(&file);
+		cross::os->SaveDataFile(&file);
 		file.data = NULL;
 	}
 
@@ -6161,9 +6161,9 @@ static void ShowExampleAppMainMenuBar()
 // (future version will add explicit flags to BeginMenu() to request processing shortcuts)
 void ImGui::LoadStyle()
 {
-	if(cross::system->IsDataFileExists("Style.ui"))
+	if(cross::os->IsDataFileExists("Style.ui"))
 	{
-		File* file = cross::system->LoadDataFile("Style.ui");
+		File* file = cross::os->LoadDataFile("Style.ui");
 		ImVec4* colors = ImGui::GetStyle().Colors;
 		memcpy(colors, file->data, (Size)file->size);
 		delete file;

@@ -1663,7 +1663,7 @@ struct ImGuiContext
         SettingsLoaded = false;
         SettingsDirtyTimer = 0.0f;
         HookIdNext = 0;
-		SaveSettings = true;
+		//SaveSettings = true;
 
         LogEnabled = false;
         LogType = ImGuiLogType_None;
