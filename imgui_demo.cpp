@@ -5723,7 +5723,7 @@ void ImGui::ShowAboutWindow(bool* p_open)
 bool ImGui::ShowStyleSelector(const char* label)
 {
     static int style_idx = -1;
-    if (ImGui::Combo(label, &style_idx, "Dark\0Light\0Classic\0"))
+    if (ImGui::Combo(label, &style_idx, "Dark\0Light\0Classic\0Warm\0"))
     {
         switch (style_idx)
         {
