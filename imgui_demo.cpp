@@ -7476,7 +7476,7 @@ static void ShowDemoWindowInputs()
         if (inputs_opened)
         {
             if (ImGui::IsMousePosValid())
-            ImGui::Text("Mouse pos: (%g, %g)", io.MousePos.x, io.MousePos.y);
+                ImGui::Text("Mouse pos: (%g, %g)", io.MousePos.x, io.MousePos.y);
             else
                 ImGui::Text("Mouse pos: <INVALID>");
             ImGui::Text("Mouse delta: (%g, %g)", io.MouseDelta.x, io.MouseDelta.y);
