@@ -2110,6 +2110,7 @@ struct ImGuiTableColumnSortSpecs
 // We call C++ constructor on own allocated memory via the placement "new(ptr) Type()" syntax.
 // Defining a custom placement new() with a custom parameter allows us to bypass including <new> which on some platforms complains when user has disabled exceptions.
 //-----------------------------------------------------------------------------
+
 struct ImNewWrapper {};
 inline void* operator new(size_t, ImNewWrapper, void* ptr) { return ptr; }
 inline void  operator delete(void*, ImNewWrapper, void*)   {} // This is only required so we can use the symmetrical new()
@@ -2118,6 +2119,7 @@ inline void  operator delete(void*, ImNewWrapper, void*)   {} // This is only re
 #define IM_PLACEMENT_NEW(_PTR)              new(ImNewWrapper(), _PTR)
 #define IM_NEW(_TYPE)                       new(ImNewWrapper(), ImGui::MemAlloc(sizeof(_TYPE))) _TYPE
 template<typename T> void IM_DELETE(T* p)   { if (p) { p->~T(); ImGui::MemFree(p); } }
+
 //-----------------------------------------------------------------------------
 // ImVector<>
 // Lightweight std::vector<>-like class to avoid dragging dependencies (also, some implementations of STL with debug enabled are absurdly slow, we bypass it so our code runs fast in debug).
