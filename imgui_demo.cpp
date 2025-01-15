@@ -200,13 +200,6 @@ Index of this file:
 #endif
 #endif
 
-#include "Cross.h"
-#include "System.h"
-#include "File.h"
-#include "Config.h"
-
-using namespace cross;
-
 //-----------------------------------------------------------------------------
 // [SECTION] Forward Declarations
 //-----------------------------------------------------------------------------
@@ -8044,7 +8037,7 @@ void ImGui::ShowStyleEditor(ImGuiStyle* ref)
     if (ImGui::SliderFloat("FrameRounding", &style.FrameRounding, 0.0f, 12.0f, "%.0f"))
         style.GrabRounding = style.FrameRounding; // Make GrabRounding always the same value as FrameRounding
     { bool border = (style.WindowBorderSize > 0.0f); if (ImGui::Checkbox("WindowBorder", &border)) { style.WindowBorderSize = border ? 1.0f : 0.0f; } }
-        ImGui::SameLine();
+    ImGui::SameLine();
     { bool border = (style.FrameBorderSize > 0.0f);  if (ImGui::Checkbox("FrameBorder",  &border)) { style.FrameBorderSize  = border ? 1.0f : 0.0f; } }
     ImGui::SameLine();
     { bool border = (style.PopupBorderSize > 0.0f);  if (ImGui::Checkbox("PopupBorder",  &border)) { style.PopupBorderSize  = border ? 1.0f : 0.0f; } }
@@ -8374,8 +8367,6 @@ static void ShowExampleAppMainMenuBar()
     }
 }
 
-// Note that shortcuts are currently provided for display only
-// (future version will add explicit flags to BeginMenu() to request processing shortcuts)
 void ImGui::LoadStyle()
 {
 	if(cross::os->IsDataFileExists("Style.ui"))
@@ -8388,7 +8379,8 @@ void ImGui::LoadStyle()
 	}
 }
 
-// Note that shortcuts are currently provided for display only (future version will add flags to BeginMenu to process shortcuts)
+// Note that shortcuts are currently provided for display only
+// (future version will add explicit flags to BeginMenu() to request processing shortcuts)
 static void ShowExampleMenuFile()
 {
     IMGUI_DEMO_MARKER("Examples/Menu");
@@ -9053,9 +9045,9 @@ static void ShowExampleAppLayout(bool* p_open)
                 ImGui::EndTabBar();
             }
             ImGui::EndChild();
-                if (ImGui::Button("Revert")) {}
-                ImGui::SameLine();
-                if (ImGui::Button("Save")) {}
+            if (ImGui::Button("Revert")) {}
+            ImGui::SameLine();
+            if (ImGui::Button("Save")) {}
             ImGui::EndGroup();
         }
     }
