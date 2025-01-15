@@ -200,6 +200,13 @@ Index of this file:
 #endif
 #endif
 
+#include "Cross.h"
+#include "System.h"
+#include "File.h"
+#include "Config.h"
+
+using namespace cross;
+
 //-----------------------------------------------------------------------------
 // [SECTION] Forward Declarations
 //-----------------------------------------------------------------------------
